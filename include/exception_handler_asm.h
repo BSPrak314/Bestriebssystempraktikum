@@ -17,7 +17,7 @@ void 		asm_CPSR_disableFIQ( void );
 unsigned int asm_getCPSR( void );
 unsigned int asm_getLR( void );
 unsigned int asm_getRegisters( void );
-unsigned int asm_sysRegisterFromStack( void );
-void 		asm_sysRegisterToStack( unsigned int [] );
+unsigned int asm_saveSysRegisterToTmp( void );
+void 		asm_loadSysRegisterFromTmp( unsigned int [] );
 
 #endif

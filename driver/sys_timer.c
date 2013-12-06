@@ -1,5 +1,6 @@
 
 #include <printf.h>
+#include <thread.h>
 
 /* address SYSTEM TIMER*/
 #define ST_BASE 0xFFFFFD00
@@ -164,6 +165,7 @@ void st_handlePIT( void )
 {
         if(infoPIT != 0)
                 printf(infoPIT);
+        thread_baseSheduler();
 }
 
 void st_handleAlarmInterrupt( void )

@@ -111,17 +111,18 @@ asm_getRegisters:
         mov     r0, sp                          // parameter to other registers on stack
         mov     pc, lr                          // jump back
 
-.global asm_sysRegisterToStack
-asm_sysRegisterToStack:
+.global asm_saveSysRegisterToTmp
+asm_saveSysRegisterToTmp:
         stmfd   sp!, {sp,lr}^                   // save usr/sys-register
-        stmfd   sp!, {spsr_irq}                 // save spsr_irq-register (cpsr from usr/sys)
+        sub     sp, sp, #0x4;
+        mrs     sp, spsr                        // save spsr_irq-register (cpsr from usr/sys)
         add     r0, sp, #0x40                   // set r0 to sp position where r0-r12 from usr/sys mode is saved
         bl saveRegisterInArray
         add     sp, sp, #0xC                    // set sp to value before saving
         mov     pc, lr                          // jump back
 
-.global asm_sysRegisterFromStack
-asm_sysRegisterFromStack:
+.global asm_loadSysRegisterFromTmp
+asm_loadSysRegisterFromTmp:
         add     sp, sp, #0x34                   // r0 now points to registers on stack
         ldr     r1, =0xd                        // our loop variable
         loop:
@@ -129,13 +130,13 @@ asm_sysRegisterFromStack:
             sub     sp, sp, #0x4                // go down on the stack
             add     r0, r0, #0x4                // get next register value 
             sub     r1, r1, #0x1                // loop ariable
-            tst     r1, 0                       // set comparison flag
+            tst     r1, #0x0                    // set comparison flag
         blne loop                               // execute branch if compare flag = 0
         stm     r0, {sp}^                       // write usr/sys sp value
         add     r0, r0, #0x4
         stm     r0, {lr}^                       // write usr/sys lr value
         add     r0, r0, #0x4
-        stm     r0, {spsr_irq}^                 // write usr/sys cpsr to spsr_irq
+        msr     spsr, r0                        // write usr/sys cpsr to spsr_irq
         add     r0, r0, #0x4
         mov     pc, lr                          // jump back
 

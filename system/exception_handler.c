@@ -55,7 +55,7 @@ int handle_irq(void)
 {
         /* first check if some SystemTimer has triggered
          * SystemTimer should check the status register and deal with triggered Interrupts */
-        st_dealWithTimerInterrupts();
+        st_dealWithInterrupts();
         
         /* if DBGU Interrupt has triggered - dbgu.c should deal with it  
          * let the dbgu check and deal with them if necessary  */
@@ -160,7 +160,7 @@ int handle_spurious( void )
 void print_cpsr( void )
 {
         unsigned int cpsr = asm_getCPSR();
-        print("cpsr : [<%b>]\n",cpsr);
+        print("cpsr : [<%x>]\n",cpsr);
 }
 
 //Prints register nr reg when interrupt occurs
@@ -168,7 +168,7 @@ void print_register( unsigned int reg )
 {       
         if(reg > 14)
                 return;
-        (struct reg_info *)registers = asm_getRegisters();
+        struct reg_info *registers = (struct reg_info *)asm_getRegisters();
         registers->lr = asm_getLR();
         unsigned int reg_contains = 0;
         
@@ -225,9 +225,9 @@ void print_register( unsigned int reg )
 //Prints register nr reg when interrupt occurs
 void print_allRegisters( void )
 {       
-        (struct reg_info *)registers = asm_getRegisters();
+        struct reg_info *registers = (struct reg_info *)asm_getRegisters();
         registers->lr = asm_getLR();
-        print(registers);
+        print_reginfo(registers);
 }
 
 //Prints registers when interrupt occurs

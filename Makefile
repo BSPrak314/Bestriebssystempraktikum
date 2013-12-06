@@ -15,7 +15,7 @@ BIN = bin
 # Quellen
 #
 LSCRIPT = kernel.lds
-OBJ = system/start.o system/stacks_asm.o system/exception_handler.o system/exception_handler_asm.o system/initKernel.o
+OBJ = system/start.o system/stacks_asm.o system/exception_handler.o system/exception_handler_asm.o system/initKernel.o system/thread.o
 OBJ += driver/dbgu.o driver/aic.o driver/mem_ctrl.o driver/sys_timer.o driver/led.o
 OBJ += lib/printf.o lib/systemtests.o lib/regcheck.o lib/regcheck_asm.o lib/buffer.o lib/utils.o lib/console.o lib/scanf.o
 

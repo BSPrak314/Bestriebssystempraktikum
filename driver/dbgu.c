@@ -1,6 +1,8 @@
 
 #include <dbgu.h>
 #include <buffer.h>
+#include <thread.h>
+#include <printf.h>
 
 /* address DEBUG UNIT*/
 #define DBGU 0xfffff200
@@ -34,6 +36,9 @@
  * DBGU_IDR to disable corresponding interrupts 
  * DBGU_IMR to get the status of the corresponding interrupt
  */
+
+#define THREAD_TEST 1
+
 struct dbgu_interface {
         unsigned int DBGU_CR;           /* Write-only */
         unsigned int DBGU_MR;           /* Read & Write */
@@ -143,6 +148,9 @@ void dbgu_dealWithInterrupts( void )
 {
         if( dbgu_triggeredRXRDY() ){
                 dbgu_inputBuffering();
+                if( THREAD_TEST ){
+                    thread_newThread(dbgu_threadTest);
+                }
         }
         if( dbgu_triggeredTXRDY() ){
                 if( dbgu_hasBufferedOutput() ){
@@ -213,4 +221,18 @@ void dbgu_writeChar( char c )
         while( !(dbgu->DBGU_SR & TXRDY) )
                 ;
         dbgu->DBGU_THR = (unsigned int)c;
+}
+
+void dbgu_threadTest( void )
+{
+        char c = 0;
+        while( c == 0 ){
+            if( dbgu_hasBufferedInput() ){
+                c = dbgu_nextInputChar();
+            }
+        }
+        int i = 0;
+        for(i = 0;i<14;i++)
+            printf("%c",c);
+
 }

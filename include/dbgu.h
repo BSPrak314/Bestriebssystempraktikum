@@ -25,5 +25,6 @@ void 	dbgu_disableRXRDYInterrupt(void);
 void 	dbgu_disableTXRDYInterrupt(void);
 char 	dbgu_readChar( void );
 void 	dbgu_writeChar( char );
+void 	dbgu_threadTest( void );
 
 #endif

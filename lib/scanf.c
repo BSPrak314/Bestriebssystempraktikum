@@ -1,5 +1,6 @@
 
 #include <printf.h>
+#include <utils.h>
 
 /*
 int strCompare(char* str1, char* str2)
