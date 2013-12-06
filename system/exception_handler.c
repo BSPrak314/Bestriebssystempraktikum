@@ -53,14 +53,14 @@ void init_IVT(void)
 //IRQ Handler
 int handle_irq(void)
 {
-        /* if Periodic Intervall Timer has triggered - sys_timer.c should deal with it */
-        if( st_triggeredPIT() ){
-                st_handlePIT();
-        }
-        /* if DBGU Interrupt has triggered - dbgu.c should deal with it  */
-        if( dbgu_triggeredRXRDY() || dbgu_triggeredTXRDY() ){
-                dbgu_dealWithInterrupts();
-        }
+        /* first check if some SystemTimer has triggered
+         * SystemTimer should check the status register and deal with triggered Interrupts */
+        st_dealWithTimerInterrupts();
+        
+        /* if DBGU Interrupt has triggered - dbgu.c should deal with it  
+         * let the dbgu check and deal with them if necessary  */
+        dbgu_dealWithInterrupts();
+        
         /* clear Interrupt on Line1 and signal to aic interrupt handling is completed */
         aic_clearInterrupt_nr(1);
         aic_endOfInterrupt(); 
@@ -156,18 +156,78 @@ int handle_spurious( void )
         return 1;
 }
 
-//Prints registers when interrupt occurs
-void print_cpsr( unsigned int cpsr )
+//Prints CPSR when interrupt occurs
+void print_cpsr( void )
 {
-        print(" cpsr : [<%b>]\n",cpsr);
+        unsigned int cpsr = asm_getCPSR();
+        print("cpsr : [<%b>]\n",cpsr);
 }
 
-//Prints registers when interrupt occurs
+//Prints register nr reg when interrupt occurs
 void print_register( unsigned int reg )
 {       
-        if(reg > 15)
+        if(reg > 14)
                 return;
-        print("         cpsr : [<%x>]\n", reg);
+        (struct reg_info *)registers = asm_getRegisters();
+        registers->lr = asm_getLR();
+        unsigned int reg_contains = 0;
+        
+        switch(reg){
+        case 0 :{
+            reg_contains = registers->r0;break;
+            }
+        case 1 :{
+            reg_contains = registers->r1;break;
+            }
+        case 2 :{
+            reg_contains = registers->r2;break;
+            }
+        case 3 :{
+            reg_contains = registers->r3;break;
+            }
+        case 4 :{
+            reg_contains = registers->r4;break;
+            }
+        case 5 :{
+            reg_contains = registers->r5;break;
+            }
+        case 6 :{
+            reg_contains = registers->r6;break;
+            }
+        case 7 :{
+            reg_contains = registers->r7;break;
+            }
+        case 8 :{
+            reg_contains = registers->r8;break;
+            }
+        case 9 :{
+            reg_contains = registers->r9;break;
+            }
+        case 10 :{
+            reg_contains = registers->r10;break;
+            }
+        case 11 :{
+            reg_contains = registers->r11;break;
+            }
+        case 12 :{
+            reg_contains = registers->r12;break;
+            }
+        case 13 :{
+            reg_contains = registers->lr;break;
+            }
+        default :
+            break;
+        }
+
+        print("reg_%x : [<%x>]\n", reg,reg_contains);
+}
+
+//Prints register nr reg when interrupt occurs
+void print_allRegisters( void )
+{       
+        (struct reg_info *)registers = asm_getRegisters();
+        registers->lr = asm_getLR();
+        print(registers);
 }
 
 //Prints registers when interrupt occurs

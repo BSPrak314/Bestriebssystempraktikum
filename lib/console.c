@@ -9,7 +9,7 @@
 #include <systemtests.h>
 #include <console.h>
 #include <regcheck.h>
-#include <exception_handler_asm.h>
+#include <exception_handler.h>
 
 
 void console ( void )
@@ -90,17 +90,23 @@ void printInfo( char* string )
 
 	char* cpsr = "cpsr";
 	char* registers = "registers";
+	//char* regnr = "reg nr";
 
 	string = string +6;
 	if( startsWith(string, cpsr) ){
-		asm_printCPSR();
+		print_cpsr();
 		return;
 	}else if( startsWith(string, registers) ){
-		asm_printRegisters();
+		print_allRegisters();
 		return;
 	}
+	/*
+	else if( startsWith(string, regnr) ){
+		asm_printRegisters();
+		return;
+	}*/
 	printf("> can not recognize print attributes\n");
-	printf("> type print <cpsr|registers>\n>");
+	printf("> type print <cpsr|registers|>\n>");
 	return;
 }
 

@@ -17,13 +17,13 @@ struct reg_info{
 	unsigned int r11;
 	unsigned int r12;
 	unsigned int lr;
-	unsigned int pc;
 };
 
 void init_IVT( void );
 void print_reginfo( struct reg_info*);
-void print_cpsr( unsigned int );
+void print_cpsr( void );
 void print_register( unsigned int );
+void print_allRegisters( void );
 int handle_reset( void );
 int handle_undef_instr(struct reg_info*);
 int handle_swi(struct reg_info*);

@@ -35,6 +35,7 @@ void startOS(void)
 	/* now initalizing AIC, with some function of sys_timer.c 
 	 * set Periodic TimeIntervall to 1sec and enable PeriodicIntervallTimer */
 	st_setPeriodicValue(0x00004000);
+	st_setRealTimeValue(0x00000001);
 	st_enablePIT();
 
 	yellow_on();

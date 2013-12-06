@@ -95,17 +95,47 @@ asm_CPSR_disableFIQ:
         msr      cpsr, r0                       // set status register
         mov      pc, lr                         // jump back
 
-.global asm_printCPSR
-asm_printCPSR:
+.global asm_getCPSR
+asm_getCPSR:
         mrs      r0, cpsr                       // load status register
         bl print_cpsr                           // execute printing
         mov      pc, lr                         // jump back
 
-.global asm_printRegisters
-asm_printRegisters:
-        sub     lr, lr, #0x8
-        stmfd   sp!, {r0-r12,lr}                // save register
-        mov     r0, lr                          // parameter to print out register information
-        bl print_reginfo                        // execute printing
-        ldmfd   sp!, {r0-r12,lr}                // write back register
-        add     pc, lr, #0x8                    // jump back
+.global asm_getLR
+asm_getLR:
+        sub     r0, lr, #0x8                    // parameter to lr
+        mov     pc, lr                          // jump back
+
+.global asm_getRegisters
+asm_getRegisters:
+        mov     r0, sp                          // parameter to other registers on stack
+        mov     pc, lr                          // jump back
+
+.global asm_sysRegisterToStack
+asm_sysRegisterToStack:
+        stmfd   sp!, {sp,lr}^                   // save usr/sys-register
+        stmfd   sp!, {spsr_irq}                 // save spsr_irq-register (cpsr from usr/sys)
+        add     r0, sp, #0x40                   // set r0 to sp position where r0-r12 from usr/sys mode is saved
+        bl saveRegisterInArray
+        add     sp, sp, #0xC                    // set sp to value before saving
+        mov     pc, lr                          // jump back
+
+.global asm_sysRegisterFromStack
+asm_sysRegisterFromStack:
+        add     sp, sp, #0x34                   // r0 now points to registers on stack
+        ldr     r1, =0xd                        // our loop variable
+        loop:
+            str     r0, [sp]                    // replace old saved r[i] on stack with value from param
+            sub     sp, sp, #0x4                // go down on the stack
+            add     r0, r0, #0x4                // get next register value 
+            sub     r1, r1, #0x1                // loop ariable
+            tst     r1, 0                       // set comparison flag
+        blne loop                               // execute branch if compare flag = 0
+        stm     r0, {sp}^                       // write usr/sys sp value
+        add     r0, r0, #0x4
+        stm     r0, {lr}^                       // write usr/sys lr value
+        add     r0, r0, #0x4
+        stm     r0, {spsr_irq}^                 // write usr/sys cpsr to spsr_irq
+        add     r0, r0, #0x4
+        mov     pc, lr                          // jump back
+

@@ -75,7 +75,7 @@ void st_setPeriodicValue(unsigned int counter)
         sys_timer->ST_PIMR = counter;
 }
 
-void st_setRealtimeValue(unsigned int counter)
+void st_setRealTimeValue(unsigned int counter)
 {
         sys_timer->ST_RTMR = counter;
 }
@@ -130,24 +130,34 @@ void st_disableAlarmInterrupt(void)
         sys_timer->ST_IDR = ALMS;
 }
 
-int st_triggeredPIT(void)
+int st_getStatusRegister(void)
 {
-        return (sys_timer->ST_SR & PITS) && (sys_timer->ST_IMR & PITS);
+        return sys_timer->ST_SR;
 }
 
-int st_triggeredWDT(void)
+int st_getTimeStamp(void)
 {
-        return (sys_timer->ST_SR & WDOVF) && (sys_timer->ST_IMR & WDOVF);
+        return sys_timer->ST_CRTR;
 }
 
-int st_triggeredRTT(void)
+int st_triggeredPIT(unsigned int status_reg)
 {
-        return (sys_timer->ST_SR & RTTINC) && (sys_timer->ST_IMR & RTTINC);
+        return (status_reg & PITS) && (sys_timer->ST_IMR & PITS);
 }
 
-int st_triggeredAlarmInterrupt(void)
+int st_triggeredWDT(unsigned int status_reg)
 {
-        return (sys_timer->ST_SR & ALMS) && (sys_timer->ST_IMR & ALMS);
+        return (status_reg & WDOVF) && (sys_timer->ST_IMR & WDOVF);
+}
+
+int st_triggeredRTT(unsigned int status_reg)
+{
+        return (status_reg & RTTINC) && (sys_timer->ST_IMR & RTTINC);
+}
+
+int st_triggeredAlarmInterrupt(unsigned int status_reg)
+{
+        return (status_reg) && (sys_timer->ST_IMR & ALMS);
 }
 
 void st_handlePIT( void )
@@ -156,10 +166,19 @@ void st_handlePIT( void )
                 printf(infoPIT);
 }
 
+void st_handleAlarmInterrupt( void )
+{
+        ;
+}
+
 int st_dealWithInterrupts( void )
 {
-        if( st_triggeredPIT() ){
+        unsigned int status_reg = sys_timer->ST_SR;
+        if( st_triggeredPIT(status_reg) ){
                 st_handlePIT();               
+        }
+        if( st_triggeredAlarmInterrupt(status_reg) ){
+                st_handleAlarmInterrupt();               
         }
         return 1;
 }
