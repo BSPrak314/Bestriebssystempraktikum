@@ -11,13 +11,17 @@
 # make clean	-- Löscht alle erzeugten Dateien.
 #
 BIN = bin
+DRIVER = driver
+SYSTEM = system
+LIB = lib
 #
 # Quellen
 #
 LSCRIPT = kernel.lds
-OBJ = system/start.o system/stacks_asm.o system/exception_handler.o system/exception_handler_asm.o system/initKernel.o system/thread.o
-OBJ += driver/dbgu.o driver/aic.o driver/mem_ctrl.o driver/sys_timer.o driver/led.o
-OBJ += lib/printf.o lib/systemtests.o lib/regcheck.o lib/regcheck_asm.o lib/buffer.o lib/utils.o lib/console.o lib/scanf.o
+OBJ = $(SYSTEM)/start.o $(SYSTEM)/stacks_asm.o $(SYSTEM)/initKernel.o $(SYSTEM)/exception_handler.o $(SYSTEM)/exception_handler_asm.o $(SYSTEM)/thread.o
+OBJ += $(DRIVER)/dbgu.o $(DRIVER)/aic.o $(DRIVER)/mem_ctrl.o $(DRIVER)/sys_timer.o $(DRIVER)/led.o $(DRIVER)/pmc.o
+OBJ += $(LIB)/printf.o $(LIB)/systemtests.o $(LIB)/regcheck.o $(LIB)/regcheck_asm.o $(LIB)/utils.o $(LIB)/shell.o $(LIB)/reg_operations_asm.o $(LIB)/buffer.o $(LIB)/list.o
+
 
 OBJ := $(OBJ:%=$(BIN)/%)
 

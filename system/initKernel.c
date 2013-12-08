@@ -1,6 +1,7 @@
 
 #include <exception_handler.h>
 #include <exception_handler_asm.h>
+#include <reg_operations_asm.h>
 #include <systemtests.h>
 #include <aic.h>
 #include <led.h>
@@ -8,7 +9,8 @@
 #include <buffer.h>
 #include <sys_timer.h>
 #include <mem_ctrl.h>
-#include <console.h>
+#include <shell.h>
+#include <thread.h>
 
 void startOS(void)
 {
@@ -33,17 +35,22 @@ void startOS(void)
 	red_on();
 
 	/* now initalizing AIC, with some function of sys_timer.c 
-	 * set Periodic TimeIntervall to 1sec and enable PeriodicIntervallTimer */
+	 * set Periodic TimeIntervall to 1sec and enable PeriodicIntervallTimer 
+	 * then sets RealTimeValue to about 32.77 microsec */
 	st_setPeriodicValue(0x00004000);
-	st_setRealTimeValue(0x00000001);
 	st_enablePIT();
-
+	st_setRealTimeValue(0x00000001);
+	
 	yellow_on();
 	
 	/* now initalizing IO Buffers in dbgu and makes sure that reading/writing is enabled */
 	dbgu_start();
 		
+	/* enables Threads by initializing controll structures 
+	 * also sets the PIT-value to timeslice, defined in thread.c */
+	thread_enableThreads();
 	green_on();
+
 	/* enables IRQ Interrupts by clearing the 7th bit in CPSR */
 	asm_CPSR_enableIRQ();
 
@@ -51,7 +58,7 @@ void startOS(void)
 	yellow_off();
 	green_off();
 	
-	console();
+	shell_start();
 	
 }
 

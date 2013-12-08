@@ -37,7 +37,7 @@
  * DBGU_IMR to get the status of the corresponding interrupt
  */
 
-#define THREAD_TEST 1
+extern unsigned int thread_test;
 
 struct dbgu_interface {
         unsigned int DBGU_CR;           /* Write-only */
@@ -148,8 +148,8 @@ void dbgu_dealWithInterrupts( void )
 {
         if( dbgu_triggeredRXRDY() ){
                 dbgu_inputBuffering();
-                if( THREAD_TEST ){
-                    thread_newThread(dbgu_threadTest);
+                if( thread_test ){
+                    thread_testContextChange();
                 }
         }
         if( dbgu_triggeredTXRDY() ){
@@ -221,18 +221,4 @@ void dbgu_writeChar( char c )
         while( !(dbgu->DBGU_SR & TXRDY) )
                 ;
         dbgu->DBGU_THR = (unsigned int)c;
-}
-
-void dbgu_threadTest( void )
-{
-        char c = 0;
-        while( c == 0 ){
-            if( dbgu_hasBufferedInput() ){
-                c = dbgu_nextInputChar();
-            }
-        }
-        int i = 0;
-        for(i = 0;i<14;i++)
-            printf("%c",c);
-
 }

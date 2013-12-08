@@ -1,7 +1,9 @@
 
 #include <dbgu.h>
 #include <printf.h>
+#include <thread.h>
 #include <exception_handler_asm.h>
+#include <reg_operations_asm.h>
 #include <exception_handler.h>
 #include <mem_ctrl.h>
 #include <aic.h>
@@ -12,6 +14,8 @@
 #define JUMP_ADDR       0x00200020  
 #define MC_RCR          0xFFFFFF00
 #define LD_PC_PC_OFF18  0xE59FF018  //opcode pc = pc offset: 18
+
+unsigned int swi_test;
 
 struct ivt{
         unsigned int RESET;
@@ -48,6 +52,9 @@ void init_IVT(void)
         jump_add->data_abort            = (unsigned int)asm_handle_data_abort;
         jump_add->IRQ                   = (unsigned int)asm_handle_irq;
         jump_add->FIQ                   = (unsigned int)asm_handle_fiq;
+
+        /* currently no swi test -> threads.c should deal with swi interrups */
+        swi_test = 0;
 }
 
 //IRQ Handler
@@ -87,11 +94,23 @@ int handle_undef_inst(struct reg_info *reg)
         return 1;
 }
 //Software Interrupt Handler
-/* very basic handler - printing out register information */
+/* if swi_test = 1 => printing out register information 
+ * if swi_test = 0 => thread.c should handle called SWI instruction */
 int handle_swi(struct reg_info *reg)
 {        
-        print("software interrupt at:\n");
-        print_reginfo(reg);
+        // extract coded SWI instruction from link register
+        // performing shifts to clear out swi operation, 
+        // leaving only offset coding the instruction 
+        unsigned int instr = (reg->lr << 8);
+        instr = (instr >> 8);
+        // swi_test is defined here and shared with lib/systemtest.c
+        if( swi_test ){
+                print("software interrupt has infoTag : %x\n",instr);
+                print("software interrupt at:\n");
+                print_reginfo(reg);
+        }else{
+                thread_dealWithSWI(instr, reg->r[0]);
+        }
         return 1;
 }
 //Prefetch Handler
@@ -156,88 +175,44 @@ int handle_spurious( void )
         return 1;
 }
 
-//Prints CPSR when interrupt occurs
+//Prints CPSR in binaer coding, buffered printing, so output will display when interrupt handling is done
 void print_cpsr( void )
 {
         unsigned int cpsr = asm_getCPSR();
-        print("cpsr : [<%x>]\n",cpsr);
+        printf("cpsr : [<%b>]\n> \n",cpsr);
 }
 
-//Prints register nr reg when interrupt occurs
+//Prints register nr reg, buffered printing, so output will display when interrupt handling is done
 void print_register( unsigned int reg )
 {       
-        if(reg > 14)
+        if( reg > 12 && reg != 14 ){
+                printf("print register can only print register r0 to r12 and r14 := lr \nPlease retry with a register number between 0 and 12 or 14\n >\n");
                 return;
-        struct reg_info *registers = (struct reg_info *)asm_getRegisters();
-        registers->lr = asm_getLR();
-        unsigned int reg_contains = 0;
-        
-        switch(reg){
-        case 0 :{
-            reg_contains = registers->r0;break;
-            }
-        case 1 :{
-            reg_contains = registers->r1;break;
-            }
-        case 2 :{
-            reg_contains = registers->r2;break;
-            }
-        case 3 :{
-            reg_contains = registers->r3;break;
-            }
-        case 4 :{
-            reg_contains = registers->r4;break;
-            }
-        case 5 :{
-            reg_contains = registers->r5;break;
-            }
-        case 6 :{
-            reg_contains = registers->r6;break;
-            }
-        case 7 :{
-            reg_contains = registers->r7;break;
-            }
-        case 8 :{
-            reg_contains = registers->r8;break;
-            }
-        case 9 :{
-            reg_contains = registers->r9;break;
-            }
-        case 10 :{
-            reg_contains = registers->r10;break;
-            }
-        case 11 :{
-            reg_contains = registers->r11;break;
-            }
-        case 12 :{
-            reg_contains = registers->r12;break;
-            }
-        case 13 :{
-            reg_contains = registers->lr;break;
-            }
-        default :
-            break;
         }
-
-        print("reg_%x : [<%x>]\n", reg,reg_contains);
+        struct reg_info *registers = (struct reg_info *)asm_getRegisters();
+        
+        unsigned int reg_contains = registers->lr;
+        if(reg < 13)
+                reg_contains = registers->r[reg];
+        
+        printf("reg_%x : [<%x>]\n", reg,reg_contains);
 }
 
-//Prints register nr reg when interrupt occurs
+//Prints all registers, buffered printing, so output will display when interrupt handling is done
 void print_allRegisters( void )
 {       
         struct reg_info *registers = (struct reg_info *)asm_getRegisters();
-        registers->lr = asm_getLR();
         print_reginfo(registers);
 }
 
-//Prints registers when interrupt occurs
+//Prints all registers, buffered printing, so output will display when interrupt handling is done
 void print_reginfo( struct reg_info * reg)
 {
-        print("printing registers...\n");
-        print("         lr : [<%x>]\n", reg->lr);
-        print("r11: %x  r10: %x  r9 : %x\n",reg->r11, reg->r10, reg->r9);
-        print("r8 : %x  r7 : %x  r6 : %x\n",reg->r8, reg->r7, reg->r6);
-        print("r5 : %x  r4 : %x  r3 : %x\n",reg->r5, reg->r4, reg->r3);
-        print("r2 : %x  r1 : %x  r0 : %x\n",reg->r2, reg->r1, reg->r0);
-        print("> \n");
+        printf("printing registers...\n");
+        printf("         lr : [<%x>]\n", reg->lr);
+        printf("r11: %x  r10: %x  r9 : %x\n",reg->r[11], reg->r[10], reg->r[9]);
+        printf("r8 : %x  r7 : %x  r6 : %x\n",reg->r[8], reg->r[7], reg->r[6]);
+        printf("r5 : %x  r4 : %x  r3 : %x\n",reg->r[5], reg->r[4], reg->r[3]);
+        printf("r2 : %x  r1 : %x  r0 : %x\n",reg->r[2], reg->r[1], reg->r[0]);
+        printf("> \n");
 }

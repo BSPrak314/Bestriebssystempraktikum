@@ -1,10 +1,30 @@
-void waitBusy(int loops)
+
+#include <exception_handler.h>
+
+static unsigned int writeWaitTimeToReg( unsigned int time )
+{
+	return time;
+}
+
+void waitBusy( int loops )
 {
 	for(; loops > 0;loops--)
 		asm("" ::: "memory");
 }
 
-int strCompare(char* str1, char* str2)
+void wait( unsigned int millisecs )
+{
+	millisecs = millisecs*30;
+	writeWaitTimeToReg(millisecs);
+	asm(CALL_WAIT_TIME_SWI:::);	
+}
+
+void sleep( void )
+{
+	asm(CALL_SLEEP_SWI:::);
+}
+
+int strCompare( char* str1, char* str2 )
 {
 	char c1 = (char)*str1;
 	char c2 = (char)*str2;
@@ -25,7 +45,7 @@ int strCompare(char* str1, char* str2)
 	return 1;
 }
 
-int startsWith(char* str1, char* str2)
+int startsWith( char* str1, char* str2 )
 {
 	char c1 = (char)*str1;
 	char c2 = (char)*str2;

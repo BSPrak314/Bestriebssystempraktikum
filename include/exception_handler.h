@@ -2,20 +2,26 @@
 #ifndef _exception_handler_H_
 #define _exception_handler_H_
 
+#define SWI_KILL 	0xFFFFFF
+#define SWI_SLEEP 	0xF00000
+#define SWI_WAIT_TIME   0xF00001
+#define SWI_WAIT_INPUT  0xF00002
+#define SWI_WAIT_OUTPUT 0xF00003
+#define SWI_WAIT_IO	0xF00004
+#define SWI_WAIT_CODE	0xF00005
+#define SWI_WAKEUP 	0x00000F
+
+#define CALL_KILL_SWI 		"SWI 0xFFFFFF"
+#define CALL_SLEEP_SWI		"SWI 0xF00000"
+#define CALL_WAIT_TIME_SWI 	"SWI 0xF00001"
+#define CALL_WAIT_INPUT_SWI 	"SWI 0xF00002"
+#define CALL_WAIT_OUTPUT_SWI 	"SWI 0xF00003"
+#define CALL_WAIT_IO_SWI 	"SWI 0xF00004"
+#define CALL_WAIT_CODE_SWI 	"SWI 0xF00005"
+#define CALL_WAKEUP_SWI 	"SWI 0x00000F"
+
 struct reg_info{
-	unsigned int r0;
-	unsigned int r1;
-	unsigned int r2;
-	unsigned int r3;
-	unsigned int r4;
-	unsigned int r5;
-	unsigned int r6;
-	unsigned int r7;
-	unsigned int r8;
-	unsigned int r9;
-	unsigned int r10;
-	unsigned int r11;
-	unsigned int r12;
+	unsigned int r[13];
 	unsigned int lr;
 };
 

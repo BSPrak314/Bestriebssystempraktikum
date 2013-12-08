@@ -2,6 +2,7 @@
 #ifndef _thread_h_
 #define _thread_h_
 
+#define THREAD_ENABLED 1
 #define THEAD_CTRL_BASE 0x00200040
 #define THEAD_ARRAY_BASE 0x00200060
 
@@ -19,13 +20,11 @@
 #define PRIORITY_NORMAL = 2
 #define PRIORITY_LOW = 1
 
-#define TOTAL_THREADSIZE 20
+#define TOTAL_THREADSIZE 32
 #define IDLE_ENABLED 1
 #define IDLE_DISABLED 0
 
 #define NR_OF_REGS 13
-
-#define TIMESLICE 0x00000800
 
 struct thread{
 	//struct list connect;
@@ -36,6 +35,8 @@ struct thread{
 	unsigned int cpsr;
 	unsigned int priority;
 	unsigned int timestamp;
+	unsigned int sleeptime;
+	unsigned int wakeUpCode;
 };
 
 struct threadArray{
@@ -51,19 +52,23 @@ struct thread_queue{
 	struct list active;
 	struct list sleeping;
 	*/
-	unsigned int idle;
+	unsigned int nr_activeThreads;
+	unsigned int nr_sleepingThreads;
 };
 
-int thread_initQueue( void );
-int thread_baseSheduler( void );
-int thread_switch( unsigned int newActive );
-struct thread * thread_newThread( void * function_pointer );
-int thread_destroy( struct thread *deadThread );
-void saveRegisterInArray( unsigned int entry );
-//int thread_sleep( unsigned int thread_pos );
-//int thread_wakeUp( unsigned int thread_pos );
-int startIdle( void );
-int endIdle( void );
-
+void 	saveRegisterInArray( unsigned int );
+int 	thread_enableThreads( void );
+int 	thread_runSheduler( void );
+int 	thread_switch( int );
+int 	thread_start( void * );
+void 	thread_close( void );
+int 	thread_kill( void );
+int 	thread_startIdle( void );
+int 	thread_endIdle( void );
+void 	thread_testContextChange( void );
+void 	idle_thread( void );
+void 	dummy_thread( void );
+void 	thread_dealWithSWI( unsigned int, unsigned int );
+void 	thread_wakeUp( void );
 
 #endif

@@ -63,7 +63,7 @@ void st_resetWatchdog(void)
 
 void st_enableWatchdogReset(void)
 {
-        sys_timer->ST_WDMR |= RSTEN;
+        sys_timer->ST_WDMR = RSTEN;
 }
 
 void st_setWatchdogValue(unsigned int counter)
@@ -165,12 +165,13 @@ void st_handlePIT( void )
 {
         if(infoPIT != 0)
                 printf(infoPIT);
-        thread_baseSheduler();
+        if( THREAD_ENABLED )
+                thread_runSheduler();
 }
 
 void st_handleAlarmInterrupt( void )
 {
-        ;
+        thread_wakeUp();
 }
 
 int st_dealWithInterrupts( void )
