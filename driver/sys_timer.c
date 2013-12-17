@@ -3,7 +3,7 @@
 #include <thread.h>
 
 /* address SYSTEM TIMER*/
-#define ST_BASE 0xFFFFFD00
+#define ST 0xFFFFFD00
 #define initalPIV 0x00008000
 #define initalWDV 0x00000000
 #define initalRTPRES 0x00001000
@@ -33,7 +33,7 @@
                                                         /* 1 = enables / disables Alarm Status Interrupts in ST_IER / ST_IDR              */
                                                         /* Alarm Status Interrupt enabled ? ST_IMR                                                                        */
                                                         
-struct st {
+struct st_interface {
         unsigned int ST_CR;             /* Write-only */
         unsigned int ST_PIMR;           /* Read/Write */
         unsigned int ST_WDMR;           /* Read/Write */
@@ -46,10 +46,12 @@ struct st {
         unsigned int ST_CRTR;           /* Read-only  */
 };
 
+extern unsigned int thread_sheduler_enabled;
+
 char* infoPIT = 0;
 
 static volatile
-struct st * const sys_timer = (struct st *)ST_BASE;
+struct st_interface * const sys_timer = (struct st_interface *)ST;
 
 void st_initWatchdogValue(void)
 {
@@ -161,24 +163,24 @@ int st_triggeredAlarmInterrupt(unsigned int status_reg)
         return (status_reg) && (sys_timer->ST_IMR & ALMS);
 }
 
-void st_handlePIT( void )
+void st_handlePIT( struct registerStruct * regStruct )
 {
         if(infoPIT != 0)
-                printf(infoPIT);
-        if( THREAD_ENABLED )
-                thread_runSheduler();
+                print(infoPIT);
+        if(thread_sheduler_enabled)
+                thread_runSheduler( regStruct );
 }
 
 void st_handleAlarmInterrupt( void )
 {
-        thread_wakeUp();
+        ;
 }
 
-int st_dealWithInterrupts( void )
+int st_dealWithInterrupts( struct registerStruct * regStruct )
 {
         unsigned int status_reg = sys_timer->ST_SR;
         if( st_triggeredPIT(status_reg) ){
-                st_handlePIT();               
+                st_handlePIT( regStruct );               
         }
         if( st_triggeredAlarmInterrupt(status_reg) ){
                 st_handleAlarmInterrupt();               

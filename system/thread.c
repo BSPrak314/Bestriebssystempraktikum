@@ -1,4 +1,5 @@
 
+#include <list.h>
 #include <thread.h>
 #include <dbgu.h>
 #include <utils.h>
@@ -6,73 +7,157 @@
 #include <sys_timer.h>
 #include <pmc.h>
 #include <reg_operations_asm.h>
-#include <exception_handler.h>
+#include <interrupt_handler.h>
+#include <swi_call_asm.h>
 
 
-#define TIMESLICE 0x00000800
+//#define TIMESLICE 0x00000000
+#define TIMESLICE 0x00002000
 
-/* array holding the base addresses for our thread */
-unsigned int thread_sp[TOTAL_THREADSIZE];
-/* array holding registers during contextchange */
-unsigned int tmp_regs[NR_OF_REGS+3];
 /* flag to enable thread test with dummy threads, shared with dbgu */
-unsigned int thread_test = 0;
-/* message to print during context change, printed via buffered output */
-char* infoContextChange = 0; 
+unsigned int thread_test;
+unsigned int thread_sheduler_enabled;
 
-/* pointer to thread controll, hardcoded address, directly after IVT */
-static 
-struct thread_queue * const thread_ctrl = (struct thread_queue *)THEAD_CTRL_BASE;
-/* pointer to thread array, hardcoded address, directy after thread controll */
-static 
+/* message to print during context change, printed via buffered output */
+char* infoContextChange; 
+extern char* infoPIT;
+
+/* thread control structure */
+static
+struct threadQueue * const thread_ctrl = (struct threadQueue *)THEAD_CTRL_BASE;
+/* thread array */
+static
 struct threadArray * const all = (struct threadArray *)THEAD_ARRAY_BASE;
 
-/* we use reg_operatons_asm to get the registers from the running thread
- * namly the function asm_saveSysRegisterToTmp from reg_operations 
- * asm_saveSysRegisterToTmp writes relevant registers to stack 
- * and the calls 
- -> saveRegisterInArray
- * gets the address where registers from current thread where saved on the stack
- * and stores them in our tmp array  */
-void saveRegisterInArray( unsigned int entry )
+/*
+static void printThread( struct thread * thread)
 {
-	int i = 0;
-	for(i=NR_OF_REGS+2;i>=0;i--){
-		tmp_regs[i] = (unsigned int)&entry;
-		entry+=4;
-	}
+	print("thread at pos %x\n",thread->pos);
+	print("  has id      %x \n",thread->id);
+	print("    timestamp %x \n",thread->timestamp);
+	print("         next %x \n",(unsigned int)(thread->connect.next) );
+	print("         prev %x \n",(unsigned int)(thread->connect.prev) );
+	print("       status %x \n",thread->status);
 }
 
-/* return -1 if our thread queue holds no more active threads 
- * return array position for next active thread in queue otherwise */
-static int thread_nextActive( void )
+static void listIterate(struct list * list)
 {
-	int nextActive = 0;
-	// starts searching after the position of our running thread
-	//  if there is an running thread
-	if( thread_ctrl->curr_running->status != DEAD){
-		nextActive = thread_ctrl->curr_pos +1;
-		// avoid modulo operatins
-		if(nextActive >= TOTAL_THREADSIZE)
-			nextActive = 0;
+	struct list * tmp = list_getHead(list);
+	while( tmp ){
+		struct thread * currThread = (struct thread *)tmp;
+		printThread(currThread);
+		tmp = list_getHead( &currThread->connect );
+		
 	}
-	int i = 0;
-	for(i = 0;i<TOTAL_THREADSIZE;i++){
-		// found active thread
-		if( all->threads[nextActive].status == ACTIVE ){
-			if( thread_ctrl->nr_activeThreads == 0)
-				print("Error in nr_activeThreads - should be positive!\n");
-			return nextActive;
+}
+*/
+
+/* idle Mode - disable Processor Clock for IDLE MODE, every System interrupt enables Processor Clock again 
+ *           - disable Periodic Intervall Interrupt, cause there are no running threads */
+static void thread_startIdle( void )
+{
+	pmc_disableProcessorClock();
+	st_disablePIT();
+}
+
+/* Idle Thread - calls startIdle in an endless loop */
+static void thread_idleThread( void )
+{
+	while(1)
+		thread_startIdle();
+}
+
+/* each threads get an individual id 
+ * - first  8 bit for the position in our thread queue 
+ * - last  24 bit for the timestamp when the thread was created */
+static void thread_createID( struct thread * thread )
+{
+	thread->id = st_getTimeStamp();
+	thread->id = (thread->id << 8);
+	thread->id += thread->pos;
+}
+
+/* only thread_runSheduler, thread_create and thread_kill 
+ * call for
+ * thread_switch when - there are 2 or more active threads
+ *                    - at the moment when threads get enabled, to switch to idle thread 
+ *                    - the first active thread arrives to wake from idle
+ *                    - the last active thread is dead, to switch to idle */
+static int thread_switch( struct thread * newThread, struct registerStruct * regStruct )
+{
+	print(infoContextChange);
+
+	// we have pointer to a running thread, avoid special case the first switch to idle
+	if( thread_ctrl->running ){
+		// running thread is not dead - save its register values, in coresponding thread struct
+		if(thread_ctrl->running->status != DEAD){
+			memcpy( &(thread_ctrl->running->regs), regStruct, SIZE_OF_REGISTER_STRUCT);
 		}
-		nextActive++;
-		// avoid modulo operations
-		if( nextActive >= TOTAL_THREADSIZE )
-			nextActive = 0;
+		// now we put the former running thread in the right list
+		if(thread_ctrl->running->status == SLEEPING){
+			list_addTail( &(thread_ctrl->sleepingList),(struct list *)(thread_ctrl->running));	
+
+		}else if(thread_ctrl->running->status == DEAD){
+			list_addTail( &(thread_ctrl->emptyList),(struct list *)(thread_ctrl->running));
+
+		}else if(thread_ctrl->running->status == RUNNING){
+			// our idle thread has a defined position - he is sleeping now
+			if( thread_ctrl->running->pos == MAX_THREADS ){
+				thread_ctrl->running->status = SLEEPING;
+			}else{
+				thread_ctrl->running->status = ACTIVE;
+				list_addTail( &(thread_ctrl->activeList),(struct list *)(thread_ctrl->running));
+			}
+
+		}
 	}
-	// found no active thread
-	if( thread_ctrl->nr_activeThreads != 0)
-		print("Error in nr_activeThreads - should be zero!\n");
-	return -1;
+
+	// we have a pointer to sp_irq,
+	// all necessary registers for a context change is stored there in the same order as our registerStruct
+	// perform the context change with memcopy - replace the context on the stack with new context
+	memcpy(regStruct, &(newThread->regs), SIZE_OF_REGISTER_STRUCT);
+
+	// update the information in our thread_ctrl struct
+	thread_ctrl->running = newThread;
+	thread_ctrl->running->status = RUNNING;
+	thread_ctrl->running->timestamp = st_getTimeStamp();
+
+	return 1;
+}
+
+/* only thread_exit calls this function via SWI-interrupt
+ * this function performs a kill, be setting the status of the current thread to DEAD
+ * next thread get his full timeslice, next thread will be determined by our sheduler */
+static int thread_kill( struct registerStruct * regStruct )
+{	
+	thread_ctrl->running->status = DEAD;
+	st_setPeriodicValue(TIMESLICE);
+
+	return thread_runSheduler(regStruct);
+}
+/* thread_yield calls this funciton via SWI-interrupt
+ * this function calls the sheduler - which will deal with the running thread 
+ * when his is still active -> at the end of active queue
+ *          is sleeping     -> at the end of the sleeping queue
+ *          is dead         -> to his grave BUT will not kill the thread !!  */
+static int thread_calledYield( struct registerStruct * regStruct )
+{
+	st_setPeriodicValue(TIMESLICE);
+	return thread_runSheduler(regStruct);
+}
+
+static int thread_newThread( struct registerStruct * regStruct )
+{
+
+	unsigned int * pointsToThread = (unsigned int *)regStruct->r[0];
+	struct thread * newThread = (struct thread *)pointsToThread;
+	
+	int out = thread_switch(newThread, regStruct );
+	if(out){
+		return newThread->id;
+	}
+	print("##################################################\nERROR DURING THREAD_newTHREAD - DUNRING THREAD_SWITCH\n");
+	return 0;
 }
 
 /* init our thread control structure, by
@@ -84,27 +169,57 @@ static int thread_nextActive( void )
  * - sets the PeriodicTimerIntervall to our TIMESLICE, so each PIT inducates a contextchange */
 int thread_enableThreads( void )
 {
-	/*
-	thread_ctrl.empty
-	thread_ctrl.active
-	thread_ctrl.sleeping = initList();
-	*/
+
+	thread_test = 0;
+	infoContextChange = "\0"; 
+	infoPIT = "\0";
+	thread_sheduler_enabled = 0;
+
 	st_setPeriodicValue(TIMESLICE);
-	thread_ctrl->curr_running = &(all->threads[0]);
-	thread_ctrl->curr_pos = 0;
-	thread_ctrl->nr_activeThreads = 0;
-	thread_ctrl->nr_sleepingThreads = 0;
+	
+	// clear Memory 
+	// begin at threadQueue struct, goes over to tmp_regs struct and over the whole threadArray struct
+	unsigned int endValue = THEAD_CTRL_BASE + SIZE_OF_THREADCTRL + (MAX_THREADS+1) * SIZE_OF_THREAD;
+
+	clearMemory( THEAD_CTRL_BASE, endValue);
+
 	int i = 0;
-	for(i = 0;i<TOTAL_THREADSIZE-1;i++){	
+	
+	for(i = 0;i<MAX_THREADS;i++){
+		// all threads starts dead <=> this array position is empty
 		all->threads[i].status = DEAD;
-		thread_sp[i] = SP_INTERNAL_RAM - i*STACKSIZE;
+		// inital stack pointer for this array position - will never change
+		all->threads[i].inital_sp = SP_EXTERNAL_RAM - i*THREADSTACKSIZE;
+		// the current stackspointer is the inital stack pointer for this thread position
+		all->threads[i].regs.sp = all->threads[i].inital_sp;
+		// position of this thread in threadArray
+		all->threads[i].pos = i;
+		// all threads to the empty list
+		list_addTail( &(thread_ctrl->emptyList), &(all->threads[i].connect) );
 	}
+
+	// init idle thread
+	all->idleThread.status = SLEEPING;
+	for(i = 0;i<NR_OF_REGS;i++)
+		all->idleThread.regs.r[i] = 0;
+	all->idleThread.inital_sp = SP_EXTERNAL_RAM - MAX_THREADS*THREADSTACKSIZE;
+	all->idleThread.regs.sp = all->idleThread.inital_sp;
+	all->idleThread.regs.pc = (unsigned int)thread_idleThread;
+	all->idleThread.regs.lr = (unsigned int)thread_idleThread;
+	// threads run in user mode
+	all->idleThread.regs.cpsr = 0x00000010;
+	all->idleThread.pos = MAX_THREADS;
+	thread_createID( &(all->idleThread) );
+	all->idleThread.timestamp = 0;
+	// init our queue values
+	thread_ctrl->running = 0;
+	
 	return 1;
 }
 
 /* if THREAD_ENABLED in thread.h, 
  * sys-timer will call this sheduler, 
- * every time when dealing with an PIT-Interrupt
+ * every time when dealing with an PIT-Interrupt occurs
  *
  * this sheduler:
  * - findes the next thread with active status in our thread array
@@ -113,302 +228,113 @@ int thread_enableThreads( void )
  * nextActive means here : looking in all positions after the currently active thread
  * not a perfect FIFO, because a new thread will get a random position, and be the next running
  * but no thread should starve to death.. */
-int thread_runSheduler( void )
+int thread_runSheduler( struct registerStruct * regStruct )
 {
-	int newActive = thread_nextActive();
-	// no more active threads
-	if( newActive < 0 ){
-		// if our running thread is still running - nothing to change
-		if( thread_ctrl->curr_running->status == RUNNING ){
-			return 1;
-		// else turn on idle mode
+
+	if( list_isEmpty( &(thread_ctrl->activeList)) ){
+
+		if( thread_ctrl->running ){
+			if( thread_ctrl->running->status == DEAD || thread_ctrl->running->status == SLEEPING ){
+				all->idleThread.status = ACTIVE;
+				return  thread_switch( &(all->idleThread), regStruct);
+			}
+			if( thread_ctrl->running->status == RUNNING )
+				return 1;
 		}else{
-			print("all threads done - starting idle thread");
-			thread_enableThreads();
-			idle_thread();
-			return 1;
+			all->idleThread.status = ACTIVE;
+			return  thread_switch( &(all->idleThread), regStruct);
 		}
-	}
-	// found active thread to switch to
-	thread_switch( newActive );
 
-	return 1;
+	}
+	struct thread * nextActive = (struct thread *)list_popHead( &thread_ctrl->activeList);
+
+	return thread_switch(nextActive , regStruct);
 }
 
-/* switching running thread with new active thread
- * if running thread is not DEAD
- * - saving registers from running thread to tmp register
- * - store register from running thread in coresponding thread struct 
- * - set status from running to active
- * then 
- * - puts all register from new running thread to tmp register
- * - replace register values on stack with values from new running thread
- * so when this interrupt is done, new running thread will continue */
-int thread_switch( int newActive )
+int thread_create( void * function, void * params, struct registerStruct * regStruct )
 {
-	// notify about context change
-	printf(infoContextChange);
-	
-	if(newActive < 0){
-		print("Error in thread sheduling - trying to switch to non exsisting thread!! \n");
-		return -1;
-	}
-
-	int i = 0;
-	 // if running thread is not DEAD
-	if(thread_ctrl->curr_running->status != DEAD ){
-		// get register values from old running thread and saves them in tmp
-		asm_saveSysRegisterToTmp();
-		
-		// store register values from old running in thread struct
-		for(i = 0;i<NR_OF_REGS;i++)
-			thread_ctrl->curr_running->reg[i] = tmp_regs[i];
-		thread_ctrl->curr_running->lr = tmp_regs[NR_OF_REGS];
-		thread_ctrl->curr_running->sp = tmp_regs[NR_OF_REGS+1];
-		thread_ctrl->curr_running->cpsr = tmp_regs[NR_OF_REGS+2];
-
-		// old running is now an active thread - if oöd running ís sleeping, let him sleep
-		if( thread_ctrl->curr_running->status == RUNNING )
-			thread_ctrl->curr_running->status = ACTIVE;
-		// updating timestamp to CurrentRealTimeRegister Value
-		thread_ctrl->curr_running->timestamp = st_getTimeStamp();
-	}
-	// set new running thread, by updating curr_pos and curr_running in thread_ctrl
-	thread_ctrl->curr_pos = newActive;
-	thread_ctrl->curr_running = &(all->threads[newActive]);
-	// updating status flag for new running thread
-	thread_ctrl->curr_running->status = RUNNING;
-	// load register values from new running thread in tmp array
-	for(i = 0;i<NR_OF_REGS;i++)
-		tmp_regs[i] = thread_ctrl->curr_running->reg[i];
-	tmp_regs[NR_OF_REGS] = thread_ctrl->curr_running->lr;
-	tmp_regs[NR_OF_REGS+1] = thread_ctrl->curr_running->sp;
-	tmp_regs[NR_OF_REGS+2] = thread_ctrl->curr_running->cpsr;
-	// updating stored register values on sp_irq 
-	// so when leaving interrupt handler, we switch to the new running thread
-	asm_loadSysRegisterFromTmp(tmp_regs);
-	
-	return 1;
-}
-
-/* inits a new thread and switching this new thread to next running thread when this interrupt is done
- * giving the new thread the rest of the timeslice of the old running thread
- * about new thread:
- * - registers r0-r12 are set to 0
- * each possible thread in our thread queue has an own stackpointer, so
- * - sp is set to hardcoded baseaddress for the position of the new thread in our queue
- * - lr is set the function the thread will start at 
- * - cpsr is set the to current cpsr,
- * except for the following modifications:
- * N = 0, Z = 0, C = 0, V = 0, I = 0, M[4:0] = 11111 (System)
- *
- * return -1 and print a message, if threadQueue is full
- * otherwise 
- * return result for switching the new Thread to running */
-int thread_start( void * function_pointer )
-{
-	// determine the position in our thread queue 
-	// for an easy FIFO, starts looking after our running thread
-	int newPos = 0;
-	if( thread_ctrl->curr_pos > 0){
-			newPos = thread_ctrl->curr_pos +1;
-	}
-	int i = 0;
-	for(i = 0;i<TOTAL_THREADSIZE;i++){
-		// found position for new thread
-		if( all->threads[newPos].status == DEAD ){
-			break;
-		}
-		newPos++;
-		// avoid modulo operation
-		if( newPos >= TOTAL_THREADSIZE )
-			newPos = 0;
-	}
-	// have we found no empty spot in the thread queue
-	if( all->threads[newPos].status != DEAD ){
-		print("thread queue full\n");
+	if( list_isEmpty( &thread_ctrl->emptyList ) ){
+		print("no space for another thread - return 0\n");
 		return 0;
 	}
-	// one more active thread now
-	thread_ctrl->nr_activeThreads++;
-
-	// now point to the empty spot and adjust all variables
-	struct thread *newThread = &(all->threads[newPos]);
-
-	for(i = 0;i<NR_OF_REGS;i++){
-		newThread->reg[i] = 0;
-	}
-	// fresh stackpointer
-	newThread->sp = thread_sp[newPos];
-	// when this interrupt is done,
-	// this will be the address the new thread will jump to
-	newThread->lr = (unsigned int)(&function_pointer);
-	// an vanilla cpsr for our thread, will be stored in irq_spsr
-	// when the thread will switched to running
-	newThread->cpsr = asm_getSPSRforNewThread();
-	// even when this thread will be running soon , he is just active for now
-	newThread->status = ACTIVE;
-	// CurrentRealTimeRegister Value - and we are done
-	newThread->timestamp = st_getTimeStamp();
-	// switch the new thread to running
-	return thread_switch(newPos);
-}
-
-/* this funcition is called from system/usr mode - so we have to throw an exception to initiate a thread switch 
- * calling a swi with the kill instruction will do the trick 
- * CALL_KILL_SWI is defined in exception_handler.h */
-void thread_close( void )
-{
-	asm(CALL_KILL_SWI:::);
-}
-
-/* sets the status of the currently running thread to DEAD
- * then switches the DEAD running thread with next active thread 
- *
- * return -1 if trying to kill a non running thread
- * return 1 if last running thread was killed and idle mode is entered
- * return result of switching to next active thread otherwise */
-int thread_kill( void )
-{
-	if(thread_ctrl->curr_running == 0){
-		print("trying to kill thread with no non-running thread\n");
-		print("means sheduler is running wild !! \n");
-		return -1;
-	}
-	if( thread_ctrl->curr_running->status != RUNNING){
-		print("trying to kill non-running thread\n");
-		print("means curr_running is not a running thread !! \n");
-		return -1;
-	}
-	// the actuall killing
-	thread_ctrl->curr_running->status = DEAD;
-	thread_ctrl->nr_activeThreads--;
-
-	// current thread is dead, next thread deserves his full timeslice
-	st_setPeriodicValue(TIMESLICE);
-
-
-	// no more active threads means idle mode - otherwise thread_switch
-	// entering via thread_sheduler would save code lines
-	// entering by writing 3 lines double saves 2 jumps...
-	//return thread_runSheduler();
-	// avoid some jumps...
-
-	int next = thread_nextActive();
-	if( next < 0 ){
-		if( thread_ctrl->nr_activeThreads != 0)
-			print("Error in nr_activeThreads - should be zero after killing!\n");
-		print("all threads done - starting idle thread");
-		thread_enableThreads();
-		idle_thread();
-		return 1;
-	}
-	// switch the next active thread
-	if( thread_ctrl->nr_activeThreads == 0)
-		print("Error in nr_activeThreads - at least one left!\n");
-	return thread_switch( next );
-}
-
-/* disables PIT Interrupts, 
- * disablesProcessorClock <=> StandbyMode enabled
- * and set the flag in thread_ctrl */
-int thread_startIdle( void )
-{
-	pmc_disableProcessorClock();
-	st_disablePIT();
-	return 1;
-}
-
-/* enables PIT Interrupts, reload TIMESLICE as PIT Value
- * and set the flag in thread_ctrl */
-int thread_endIdle( void )
-{
-	st_setPeriodicValue(TIMESLICE);
+	
 	st_enablePIT();
+	//print("\nbefore popHead : thread_ctrl->emptyList \n");
+	//listIterate(&thread_ctrl->emptyList);
+	struct thread * newThread = (struct thread *)list_popHead( &thread_ctrl->emptyList );
+	//print("\nafter popHead : thread_ctrl->emptyList \n");
+	//listIterate(&thread_ctrl->emptyList);
+	//print("\nnewThread->pos %x\n", newThread->pos);
+
+	newThread->status = ACTIVE;
+
+	int i = 0;
+
+	newThread->regs.r[0] = (unsigned int)params;
+	for(i = 1;i<NR_OF_REGS;i++){
+		newThread->regs.r[i] = 0;
+	}
+
+	// newThread
+	// ->regs.pc <=> interrupt lr, where the new thread will continue
+	// 
+	newThread->regs.pc = (unsigned int)function;
+	newThread->regs.lr = (unsigned int)thread_exit;
+	newThread->regs.cpsr = 0x00000010;
+	newThread->regs.sp = newThread->inital_sp;
+
+	thread_createID(newThread);
+	newThread->timestamp =  st_getTimeStamp();
+
+	if( asm_isMode_IRQ() || asm_isMode_SVC() ){
+
+		int out = thread_switch(newThread, regStruct );
+		if(out == 1){
+			return newThread->id;
+		}
+		print("##################################################\nERROR DURING THREAD_CREATE - DUNRING THREAD_SWITCH\n");
+		return 0;
+	}
+	else{
+		print("thread_create from sys or user");
+		asm_swi_call_create(newThread);
+	}
+	return 0;
+}
+
+/* when an swi interrupt is triggered, determine here what to do with the running thread */
+int thread_dealWithSWI(unsigned int swiCode, struct registerStruct * regStruct )
+{
+	switch(swiCode){
+	case SWI_KILL :{
+		return thread_kill(regStruct);
+	}
+	case SWI_CREATE :{
+		return thread_newThread(regStruct);
+	}
+	case SWI_YIELD :{
+		return thread_calledYield(regStruct);
+	}
+	default:
+		print("unknow swi code %x\nthread.c could not deal with this swi \n",swiCode);
+		printRegisterStruck(regStruct);
+		return 0;
+	}
+}
+
+/* enables a thread to end himself 
+ * will perform an svc call */
+int thread_exit( void )
+{
+	thread_ctrl->running->status = DEAD;
+	asm_swi_call_kill();
 	return 1;
 }
 
-/* int thread_test is shared with dbgu
- * if thread_test != 0 this will be called 
- * every time dbgu deals with an TXRDY Interrupt */
-void thread_testContextChange( void )
+/* enables a thread to active give up his timeslice 
+ * will perform an svc call */
+int thread_yield( void )
 {
-	thread_start( dummy_thread );
-}
-
-/* Our dummy thread
- * will print out the next character from the input buffer 14-time
- * then kill itself */
-void dummy_thread( void )
-{
-	char c = 0;
-	// get the input to print
-	while( c == 0){
-		if( dbgu_hasBufferedOutput() ){
-			c = dbgu_nextInputChar();
-		}
-	}
-	int i = 0;
-	for(i = 0;i<14;i++){
-		printf("%c",c);
-		waitBusy(800000);
-	}
-	// thread done - let init thread_kill via swi
-	thread_close();
-}
-
-/* Our idle thread
- * disables PIT Interrupts and starts endless loop,
- * will be disabled if an RXRDY Interrupt starts a new thread */
-void idle_thread( void )
-{
-	thread_startIdle();
-	while( 1 )
-		;
-}
-
-/* threads run in usr/system mode and any context change is performed during interrupts
- * so an thread will call an SWI to kill himself, put himself to sleep or wait for defined time without active waiting 
- * the SWI call will contain the instruction, the thread is trying to perform - if its waiting, we need more information
- * SWI_KILL, SWI_SLEEP, SWI_WAIT and other swi flags defined in exception_handler.h */
-void thread_dealWithSWI( unsigned int instr, unsigned int r0 )
-{
-	if(instr == SWI_KILL){
-		thread_kill();
-	}
-	if(instr == SWI_SLEEP){
-		// current thread is going to sleep, next thread deserves his full timeslice
-		st_setPeriodicValue(TIMESLICE);
-		// put thread to sleep
-		thread_ctrl->curr_running->status = SLEEPING;
-		thread_ctrl->curr_running->sleeptime = 0xFFFFFF;
-		thread_ctrl->curr_running->wakeUpCode = SWI_SLEEP;
-		// inform the control struct about thread numbers
-		thread_ctrl->nr_activeThreads--;
-		thread_ctrl->nr_sleepingThreads++;
-		// let the sheduler find out how to handle the situation
-		thread_runSheduler();
-	}
-	if(instr == SWI_WAIT_TIME){
-		// current thread is going to sleep, next thread deserves his full timeslice
-		st_setPeriodicValue(TIMESLICE);
-		// put thread to sleep 
-		thread_ctrl->curr_running->status = SLEEPING;
-		thread_ctrl->curr_running->wakeUpCode = SWI_WAIT_TIME;
-		// setting the wakeUp clock...
-		unsigned int wakeUpTime = st_getTimeStamp();
-		wakeUpTime = wakeUpTime + r0;
-		thread_ctrl->curr_running->sleeptime = wakeUpTime;
-		st_enableAlarmInterrupt();
-		// inform the control struct about thread numbers
-		thread_ctrl->nr_activeThreads--;
-		thread_ctrl->nr_sleepingThreads++;
-		// let the sheduler find out how to handle the situation
-		thread_runSheduler();
-	}
-}
-
-void thread_wakeUp( void )
-{
-	st_disableAlarmInterrupt();
+	asm_swi_call_yield();
+	return 1;
 }

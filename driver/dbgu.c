@@ -2,7 +2,7 @@
 #include <dbgu.h>
 #include <buffer.h>
 #include <thread.h>
-#include <printf.h>
+#include <systemtests.h>
 
 /* address DEBUG UNIT*/
 #define DBGU 0xfffff200
@@ -93,6 +93,12 @@ char dbgu_nextInputChar( void )
         //        return 0;
 }
 
+/* get char from InputBuffer */
+unsigned int dbgu_nrOfInputChars( void )
+{       
+        return RingBuffer_nrOfElements(&buf_IO_in);
+}
+
 void dbgu_printInputBuffer( void )
 {
         RingBuffer_printBuffer(&buf_IO_in);
@@ -144,14 +150,15 @@ void dbgu_start( void )
 }
 
 /* the irq exception_handler uses this function if RXRDY or TXRDY Interrupt was trigged */
-void dbgu_dealWithInterrupts( void )
+void dbgu_dealWithInterrupts( struct registerStruct * regStruct )
 {
         if( dbgu_triggeredRXRDY() ){
                 dbgu_inputBuffering();
-                if( thread_test ){
-                    thread_testContextChange();
+                if(thread_test){
+                    thread_create((unsigned int *)systest_dummyThread, 0, regStruct );
                 }
         }
+        /*
         if( dbgu_triggeredTXRDY() ){
                 if( dbgu_hasBufferedOutput() ){
                         dbgu_outputBufferPrint();
@@ -160,6 +167,7 @@ void dbgu_dealWithInterrupts( void )
                         dbgu_cleanOutputBuffer();
                 }
         }
+        */
 }
 
 /* return 1 (true) if Interrupt is enabled and corresponding status bit is set - 0 (false) otherwise

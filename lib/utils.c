@@ -1,27 +1,52 @@
 
-#include <exception_handler.h>
+#include <interrupt_handler.h>
+#include <printf.h>
 
-static unsigned int writeWaitTimeToReg( unsigned int time )
+/*
+ * memcpy() - primitives, nicht optimiertes memcpy()
+ *
+ * @dest: Ziel
+ * @src: Quelle
+ * @n: Menge zu kopierender Bytes
+ *
+ * Kompatibel zu dem memcpy() aus der "normalen" C-Library.
+ */
+void *memcpy(void *dest, const void *src, unsigned int n)
 {
-	return time;
+  	const char *s = src; 
+ 	char *d = dest; 
+ 
+ 	while (n--)
+ 		*d++ = *s++;
+ 
+ 	return dest;
+}
+
+void clearMemory( unsigned int start, unsigned int end)
+{
+	unsigned int * address = (unsigned int *)start;
+	while( start < end ){
+		//print("clearing memory at address %x\n",address);
+		*address = 0;
+		start+=4;
+		address = (unsigned int *)start;
+	}
+	return;
+}
+
+void printStack( unsigned int * stack, unsigned int blocks )
+{
+	unsigned int i = 0;
+	for(;i<blocks;i++){
+		print("sp -4* %x has value : %x\n", i, (unsigned int)*stack );
+		stack++;
+	}
 }
 
 void waitBusy( int loops )
 {
 	for(; loops > 0;loops--)
 		asm("" ::: "memory");
-}
-
-void wait( unsigned int millisecs )
-{
-	millisecs = millisecs*30;
-	writeWaitTimeToReg(millisecs);
-	asm(CALL_WAIT_TIME_SWI:::);	
-}
-
-void sleep( void )
-{
-	asm(CALL_SLEEP_SWI:::);
 }
 
 int strCompare( char* str1, char* str2 )

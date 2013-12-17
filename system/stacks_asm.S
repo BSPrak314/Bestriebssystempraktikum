@@ -50,7 +50,6 @@ asm_init_stacks:
         //LDR      SP, =0x23FFC000      // set stackpointer
               
         MRS      R12, CPSR              // load status register
-        BIC      R12, R12, #0x1F        // clear last 5 bits
         ORR      R12, R12, #0x1F        // set mode to sys (system mode = 11111)
         MSR      CPSR, R12              // set status register 
         LDR      SP, =0x002FB000        // set stackpointer

@@ -2,6 +2,8 @@
 #ifndef _dbgu_h_
 #define _dbgu_h_
 
+#include <thread.h>
+
 void	dbgu_bufferedOutput( char );
 void    dbgu_inputBuffering( void );
 void    dbgu_outputBufferPrint( void );
@@ -10,11 +12,12 @@ char 	dbgu_nextInputChar( void );
 void 	dbgu_cleanInputBuffer( void );
 void 	dbgu_cleanOutputBuffer( void );
 int 	dbgu_hasBufferedInput( void );
+unsigned int dbgu_nrOfInputChars( void );
 int 	dbgu_hasBufferedOutput( void );
 void 	dbgu_enableWriting( void );
 void 	dbgu_enableReading( void );
 void 	dbgu_start( void );
-void 	dbgu_dealWithInterrupts( void );
+void 	dbgu_dealWithInterrupts( struct registerStruct * );
 int 	dbgu_triggeredTXRDY( void );
 int 	dbgu_triggeredRXRDY( void );
 int 	dbgu_isRXRDY( void );

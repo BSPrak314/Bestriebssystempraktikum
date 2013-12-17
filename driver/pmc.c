@@ -1,14 +1,11 @@
 
-#include <printf.h>
-#include <thread.h>
-
 /* address SYSTEM TIMER*/
-#define PMC_BASE 0xFFFFFC00
+#define PMC 0xFFFFFC00
 
 /* Control Bits */
 #define PCK      (1)                       /* ProcessorClock */
                                                         
-struct pmc {
+struct pmc_interface {
         unsigned int PMC_SCER;             /* Write-only SystemClockEnableRegister     */
         unsigned int PMC_SCDR;             /* Write-only SystemClockDisableRegister    */
         unsigned int PMC_SCSR;             /* Read-only  SystemClockStatusRegister     */
@@ -35,7 +32,7 @@ struct pmc {
 };
 
 static volatile
-struct pmc * const power_ctrl = (struct pmc *)PMC_BASE;
+struct pmc_interface * const power_ctrl = (struct pmc_interface *)PMC;
 
 void pmc_disableProcessorClock( void )
 {

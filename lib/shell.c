@@ -7,13 +7,14 @@
 #include <dbgu.h>
 #include <systemtests.h>
 #include <regcheck.h>
-#include <exception_handler.h>
+#include <interrupt_handler.h>
 
 #include <list.h>
 
 void reboot( void )
 {
 	st_setWatchdogValue(0x00000001);
+	st_enableWatchdogReset();
 	st_enableWDT();
 }
 
@@ -29,7 +30,8 @@ static void printInfo( char* string )
 		print_cpsr();
 		return;
 	}else if( startsWith(string, registers) ){
-		print_allRegisters();
+		//print_allRegisters();
+		print("currently no implemented - sorry\n> ");
 		return;
 	}
 	/*
@@ -38,7 +40,7 @@ static void printInfo( char* string )
 		return;
 	}*/
 	printf("> can not recognize print attributes\n");
-	printf("> type print <cpsr|registers|>\n>");
+	printf("> type print <cpsr|registers|list>\n>");
 	return;
 }
 
@@ -46,6 +48,7 @@ static void doTests( char* string )
 {
 	char* bufferedIO = "bufferedIO";
 	char* threads = "threads";
+	char* list = "list";
 
 	string = string +5;
 	if( startsWith(string, bufferedIO) ){
@@ -55,9 +58,13 @@ static void doTests( char* string )
 		systest_threadTest();
 		return;
 	}
-
+	else if( startsWith(string, list) ){
+		//list_testListStruct();
+		list_testEmbeddedListStruct();
+		return;
+	}
 	printf("> can not recognize test to run\n");
-	printf("> type test <bufferedIO|threads|>\n>");
+	printf("> type test <bufferedIO|threads|list>\n>");
 	return;
 }
 
@@ -127,8 +134,8 @@ static void usingLeds( char* string )
 void shell_start( void )
 {
 
-	list_testListStruct();
-	list_testEmbeddedListStruct();
+	//list_testListStruct();
+	//list_testEmbeddedListStruct();
 
 	char* help = "help";
 	char* boot = "reboot";
@@ -139,7 +146,7 @@ void shell_start( void )
 	char* currenttest = "current test";
 	char* test = "test";
 	
-	char *info = "implemented commands:\n -> led <red|green|yellow> <on|off>\n -> reboot\n -> print <cpsr|registers>\n -> provoke <abort|software|undefined>\n -> test <bufferedIO|threads>\n -> currenttest\n -> regchecker\n> \n";
+	char *info = "implemented commands:\n -> led <red|green|yellow> <on|off>\n -> reboot\n -> print <cpsr|registers>\n -> provoke <abort|software|undefined>\n -> test <bufferedIO|threads|list>\n -> currenttest\n -> regchecker\n> \n";
 
 	char enter = '\n';
 

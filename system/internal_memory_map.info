@@ -1,0 +1,140 @@
+/*  Memory_Mapping.info  
+ *  Our currently Memory Management in the internal RAM */
+
+// Start of the internal RAM
+// MAPING 0x0020 0000
+#define IVT_ADDR        0x00200000
+	// contains an ivt struct
+	// which contains 
+	// - 8 unsigned integers 8*4 32 byte
+	// total 32 byte = 0x20
+	// struct hold the jump instruction, when interrupt occures
+
+// end of IVT_ADDR
+// MAPING 0x00200020
+// start of JUMP_ADDR
+#define JUMP_ADDR       0x00200020
+	// contains an ivt struct
+	// which contains 
+	// - 8 unsigned integers 8*4 = 32 byte
+	// total 32 byte = 0x20
+	// struct hold the jump pointers to the asm_exeptions_handlers
+
+// end of JUMP_ADDR
+// MAPING 0x00200040
+// start of THEAD_CTRL_BASE
+#define THEAD_CTRL_BASE 0x00200040
+	// contains an thread_queue struct
+	// which contains of 	
+	// - an pointer to a thread struct: 		 =  4 byte
+	// - 3 list structs each holding 2 pointers: 6*4 = 24 byte
+	// - 3 unsigned integers:	 	     3*4 = 12 byte
+	//   total 92 byte <=> 0x28 byte
+	// holds information for thread management
+
+// end of THEAD_CTRL_BASE
+// MAPING 0x00200068
+// start of THEAD_ARRAY_BASE
+
+// define the maximum number of threads, so thread array
+#define TOTAL_THREADSIZE 32
+#define THEAD_ARRAY_BASE 0x00200068
+// contains an ARRAY of TOTAL_THREADSIZE thread structs
+// each thread struct contains of 	
+// 	- an register struct holding 17 integers 	= 68 byte
+//	- an list struct holding 2 pointers		=  8 byte
+// 	- 5 unsigned integers formation			= 20 byte 
+// 	=> 0x5c byte for each thread
+//...
+//...
+// end of THEAD_ARRAY_BASE for 32 threads
+// MAPING 0x00200be8
+//...
+// end of THEAD_ARRAY_BASE for 64 threads
+// MAPING 0x00201768
+//...
+// end of THEAD_ARRAY_BASE for 128 threads
+// MAPING 0x00202e68
+//...
+// end of THEAD_ARRAY_BASE for 256 threads
+// MAPING 0x00205c68
+// START FREE SPACE
+//...
+//  32 threads := 476056 Bytes free, about 933 KByte
+//...
+//...
+//...
+//...
+//...
+//...
+//  64 threads := 476056 Bytes free, about 866 KByte
+//...
+//...
+//...
+//...
+//...
+// 128 threads := 476056 Bytes free, about 732 KByte
+//...
+//...
+//...
+// 256 threads := 476056 Bytes free, about 464 KByte
+//...
+//...
+// END FREE SPACE
+
+#define STACKSIZE 0x800 		// 2kB
+#define SP_INTERNAL_RAM 0x002FA000
+// each thread has its own stackpointer of size STACKSIZE, 
+// starting at SP_INTERNAL_RAM
+
+// MAPING 0x0027a000
+// end of stackpointer thread_256
+//...
+//...
+//...
+//...
+// MAPING 0x002BA000
+// end of stackpointer thread_128
+//...
+//...
+//...
+// MAPING 0x002DA000
+// end of stackpointer thread_64
+//...
+//...
+// MAPING 0x002EA000
+// end of stackpointer thread_32
+//...
+// start of stack pointer for thread_1
+
+/* size for stackpointers for each processor mode := 4 KByte = 0x1000 */
+// MAPING 0x002FA000
+// end of stackpointer system/user mode
+//...
+// start of stack pointer system/user mode
+// MAPING 0x002FB000
+// end of stackpointer fast interrupt mode
+//...
+// start of stack pointer fast interrupt mode
+// MAPING 0x002FC000
+// end of stackpointer interrupt mode
+//...
+// start of stack pointer interrupt mode
+// MAPING 0x002FD000
+// end of stackpointer abort mode
+//...
+// start of stack pointer for abort mode
+// MAPING 0x002FE000
+// end of stackpointer undefined mode
+//...
+// start of stack pointer undefined mode
+// MAPING 0x002FF000
+// end of stackpointer supervisor mode
+//...
+// start of stackpointer supervisor mode
+// size for stackpointers for each processor mode := 4 KByte = 0x1000
+// MAPING 0x00300000
+// END OF INTERNAL RAM !!!
+
+
+

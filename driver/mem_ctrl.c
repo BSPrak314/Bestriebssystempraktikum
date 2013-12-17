@@ -1,6 +1,6 @@
 
 /* address DEBUG UNIT*/
-#define MC_BASE 0xFFFFFF00
+#define MC 0xFFFFFF00
 
 /* Control Bits */
 #define RCB      (1)		/* Remap Command Bit, 1 = remap          */
@@ -42,7 +42,7 @@
  * MC_AASR to check Abort Adress Status
  */
 
-struct mc {
+struct mc_interface {
 	unsigned int MC_RCR;		/* Write-only */
 	unsigned int MC_ASR;		/* Read-only */
 	unsigned int MC_AASR;		/* Read-only */
@@ -50,7 +50,7 @@ struct mc {
 };
 
 static volatile
-struct mc * const mem_ctrl = (struct mc *)MC_BASE;
+struct mc_interface * const mem_ctrl = (struct mc_interface *)MC;
 
 void mc_remapMemory(void)
 {

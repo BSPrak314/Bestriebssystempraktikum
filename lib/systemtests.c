@@ -1,10 +1,8 @@
 
 #include <dbgu.h>
-#include <exception_handler.h>
+#include <interrupt_handler.h>
 #include <printf.h>
 #include <utils.h>
-#include <scanf.h>
-#include <led.h>
 #include <regcheck.h>
 
 /* message to print when PIT Interrupt detected, printed via buffered output, comes from sys_timer.c */
@@ -15,7 +13,9 @@ extern char* infoContextChange;
  * 1 = test enabled, 0 = test disabled */
 extern unsigned int thread_test;
 
-/* defined the handling of Software interrups, comes from exception_handler.c 
+extern unsigned int thread_sheduler_enabled;
+
+/* defined the handling of Software interrups, comes from interrupt_handler.c 
  * 1 = test enabled <=> swi interrupts print out register information and coded SWI instruction
  * 1 = test disabled <=> swi interrupts will delegated to thread.c and processed there */
 extern unsigned int swi_test;
@@ -24,50 +24,44 @@ extern unsigned int swi_test;
 // Provoked data abort by writing to bad address
 void systest_provoke_data_abort(void) 
 {
-        int testnr = 0;
-        printf("Systemtest: Data Abort due Undefined AdressSpace\n");
+        print("Systemtest: Data Abort due Undefined AdressSpace\n");
         unsigned int *bad_address = (unsigned int *)0x92000000;
         unsigned int dataabort = 12345;
         *bad_address = dataabort;
-        if(bad_address)
-                testnr++;
+        
+        print("Systemtest: Data Abort due Address Misalignment\n");
+        unsigned int *bad = (unsigned int *)0x2C111111;
+        unsigned int data = 0x2C111111;
+        *bad = data;
 
-        printf("Systemtest: Data Abort due Data Misalignment\n");
-        unsigned int *bad_address2 = (unsigned int *)0x2C111111;
-        unsigned int dataabort2 = 0x2C111111;
-        *bad_address2 = dataabort2;
-
-        if(bad_address2)
-                testnr++;
-
-        printf("Test Data Abort Interrupt done\n >");
+        print("Test Data Abort Interrupt done\n >");
 }
    
 void systest_provoke_sw_inter(void)
 {
         swi_test = 1;
-        printf("Systemtest: Software Interrupt Offset 0x0\n");
-        asm("swi #0x0":::);
-        printf("Software Interrupt Offset 0x99\n");
-        asm("swi #0x99":::);
-        printf("Software Interrupt Offset 0xFFFF\n");
-        asm("swi #0xFFFF":::);
-        printf("Software Interrupt Offset 0x111111\n");
-        asm("swi #0x111111":::);
+        print("Systemtest: Software Interrupt Offset 0x0\n");
+        asm("svc #0x0":::);
+        print("Software Interrupt Offset 0x99\n");
+        asm("svc #0x99":::);
+        print("Software Interrupt Offset 0xFFFF\n");
+        asm("svc #0xFFFF":::);
+        print("Software Interrupt Offset 0x111111\n");
+        asm("svc #0x111111":::);
         swi_test = 0;
-        printf("Test Software Interrupt done\n >");
+        print("Test Software Interrupt done\n >");
 }
 
 void systest_provoke_undef_inst(void)
 {
-        printf("Systemtest: Undefined Instruction\n");
+        print("Systemtest: Undefined Instruction\n");
         asm(".word 0xa000f7f0");
-        printf("Test Undefined Instruction Interrupt done\n >");
+        print("Test Undefined Instruction Interrupt done\n >");
 }
 
 void systest_testBufferedIO(void)
 {
-        printf("Systemtest: BufferedIO, controlled by interrupt not polling\n");
+        print("Systemtest: BufferedIO, controlled by interrupt not polling\n");
         int endTest = 0;
         infoPIT = "!\n";
         int pos = 0;
@@ -89,22 +83,38 @@ void systest_testBufferedIO(void)
                         int i = 0;
                         for(;i<12;i++){
                                 waitBusy(800000);
-                                printf("%c",c);
+                                print("%c",c);
                         }
                         c = 0;
                 }
                 if( endTest ){
                         infoPIT = 0;
-                        printf("Test BufferedIO done\n >");            
+                        print("Test BufferedIO done\n >");            
                         return;
                 }
                 waitBusy(20);
         }
 }
 
+void systest_dummyThread( void )
+{
+        char c = 0;
+        while( c == 0){
+                if( dbgu_hasBufferedInput() ){
+                        c = dbgu_nextInputChar();
+                }
+        }
+        int i = 0;
+        for(i = 0;i<30;i++){
+                print("%c",c);
+                waitBusy(800000);
+        }
+        thread_exit();
+}
+
 void systest_threadTest( void )
 {
-        printf("Systemtest: Thread Management  - Basictest with dummyThreads\n");
+        print("Systemtest: Thread Management  - Basictest with dummyThreads\n  Max. %x threads supported\nwhen there are no active threads\n -> switch to idle mode, disable PIT and turn off Systemclock\nwhen a  thread is done\n -> he calls a SWI to kill himself and call the sheduler\n\n",MAX_THREADS);
         /* make sure thread.c, thread_dealWithSWI deals with swi interrupts */
         swi_test = 0;
         /* each PIT interrupt now print ! and thread_switch now print newline */
@@ -112,5 +122,5 @@ void systest_threadTest( void )
         infoContextChange = "\n";
         /* now in dbgu.c an TXRDY interrupt will create a new thread */
         thread_test = 1;
+        thread_sheduler_enabled = 1;
 }
-

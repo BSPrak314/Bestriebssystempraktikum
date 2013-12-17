@@ -16,14 +16,16 @@ struct ringbuffer
 	char buffer[BUFFERSIZE];
 };
 
-void 	RingBuffer_init(struct ringbuffer*);
+void 		RingBuffer_init(struct ringbuffer*);
 
-void 	RingBuffer_printBuffer(struct ringbuffer*);
+void 		RingBuffer_printBuffer(struct ringbuffer*);
 
-char	RingBuffer_get(struct ringbuffer*);
+char		RingBuffer_get(struct ringbuffer*);
 
-void	RingBuffer_put(char, struct ringbuffer*);
+void		RingBuffer_put(char, struct ringbuffer*);
 
-int 	RingBuffer_hasElements(struct ringbuffer*);
+unsigned int 	RingBuffer_hasElements(struct ringbuffer*);
+
+unsigned int 	RingBuffer_nrOfElements(struct ringbuffer *rb);
 
 #endif

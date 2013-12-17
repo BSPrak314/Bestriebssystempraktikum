@@ -1,9 +1,7 @@
 
-
 #include <stdarg.h>
 #include <dbgu.h>
 #include <printf.h>
-#include <led.h>
 
 static void printBinaer(unsigned int address)
 {
@@ -57,7 +55,7 @@ void printf( char *str, ... )
         
         char c = *str;
         str++;
-        red_on();
+ 
         while(c != 0){
                                 
                 char d = *str;
@@ -119,7 +117,6 @@ void printf( char *str, ... )
                 c = d;
         }
         va_end(arglist);
-        red_off();
 }
 
 static void printH(unsigned int address, int do_prefix)

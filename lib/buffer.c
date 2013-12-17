@@ -49,15 +49,24 @@ char RingBuffer_get(struct ringbuffer *rb) //Gets next element of the ring buffe
         return c;
 }
 
-int RingBuffer_hasElements(struct ringbuffer *rb)
+unsigned int RingBuffer_hasElements(struct ringbuffer *rb)
 {
         return (rb->elements != 0);
+}
+
+unsigned int RingBuffer_nrOfElements(struct ringbuffer *rb)
+{
+        return rb->elements;
 }
 
 //Puts new element in the ring buffer, dealing with full buffer depends on buffer mode
 void RingBuffer_put(char c,struct ringbuffer *rb) 
 {
         rb->working = 1;
+        if( c == 0 ){
+                rb->working = 0;
+                return;
+        }
         if( rb->elements < BUFFERSIZE ){
                 rb->buffer[rb->curr_write] = c;
                 rb->elements++;

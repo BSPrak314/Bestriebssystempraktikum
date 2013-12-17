@@ -3,6 +3,8 @@
 #ifndef _sys_timer_H_
 #define _sys_timer_H_
 
+#include <thread.h>
+
 void    st_resetWatchdog( void );
 void    st_enableWatchdogReset( void );
 void    st_setWatchdogValue( unsigned int );
@@ -18,8 +20,8 @@ void    st_disablePIT( void );
 void    st_disableWDT( void );
 void    st_disableRTT( void );
 void    st_disableAlarmInterrupt( void );
-int     st_dealWithInterrupts( void );
-void 	st_handlePIT( void );
+int     st_dealWithInterrupts( struct registerStruct * );
+void 	st_handlePIT( struct registerStruct * );
 void 	st_handleAlarmInterrupt( void );
 int 	st_getStatusRegister( void );
 int 	st_getTimeStamp(void) ;

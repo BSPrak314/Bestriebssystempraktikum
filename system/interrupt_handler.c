@@ -2,17 +2,15 @@
 #include <dbgu.h>
 #include <printf.h>
 #include <thread.h>
-#include <exception_handler_asm.h>
+#include <interrupt_handler_asm.h>
 #include <reg_operations_asm.h>
-#include <exception_handler.h>
+#include <interrupt_handler.h>
 #include <mem_ctrl.h>
 #include <aic.h>
 #include <sys_timer.h>
-#include <led.h>
 
 #define IVT_ADDR        0x00200000  //remapped (writable) area for ivt
 #define JUMP_ADDR       0x00200020  
-#define MC_RCR          0xFFFFFF00
 #define LD_PC_PC_OFF18  0xE59FF018  //opcode pc = pc offset: 18
 
 unsigned int swi_test;
@@ -58,15 +56,18 @@ void init_IVT(void)
 }
 
 //IRQ Handler
-int handle_irq(void)
+int handle_irq( struct registerStruct * regStruct )
 {
+        //print("regStruct from IRQ\n");
+        //printRegisterStruck(regStruct);
+    
         /* first check if some SystemTimer has triggered
          * SystemTimer should check the status register and deal with triggered Interrupts */
-        st_dealWithInterrupts();
+        st_dealWithInterrupts( regStruct );
         
         /* if DBGU Interrupt has triggered - dbgu.c should deal with it  
          * let the dbgu check and deal with them if necessary  */
-        dbgu_dealWithInterrupts();
+        dbgu_dealWithInterrupts( regStruct );
         
         /* clear Interrupt on Line1 and signal to aic interrupt handling is completed */
         aic_clearInterrupt_nr(1);
@@ -96,20 +97,24 @@ int handle_undef_inst(struct reg_info *reg)
 //Software Interrupt Handler
 /* if swi_test = 1 => printing out register information 
  * if swi_test = 0 => thread.c should handle called SWI instruction */
-int handle_swi(struct reg_info *reg)
+int handle_swi(struct registerStruct *reg)
 {        
         // extract coded SWI instruction from link register
         // performing shifts to clear out swi operation, 
         // leaving only offset coding the instruction 
-        unsigned int instr = (reg->lr << 8);
+        unsigned int * address = (unsigned int * )(reg->pc - 4);
+        unsigned int instr = *address;
+        
+        instr = (instr << 8);
         instr = (instr >> 8);
+
         // swi_test is defined here and shared with lib/systemtest.c
         if( swi_test ){
                 print("software interrupt has infoTag : %x\n",instr);
                 print("software interrupt at:\n");
-                print_reginfo(reg);
+                printRegisterStruck(reg);
         }else{
-                thread_dealWithSWI(instr, reg->r[0]);
+                thread_dealWithSWI(instr, reg);
         }
         return 1;
 }
@@ -127,6 +132,8 @@ int handle_prefetch(struct reg_info *reg)
 int handle_data_abort(struct reg_info *reg)
 {
         print("data abort during:\n");
+
+        
         switch( mc_getAbortType() ){
         case 0 : {
                 print("data read\n"); break;
@@ -147,6 +154,7 @@ int handle_data_abort(struct reg_info *reg)
 
         print("at Adress %x \n",mc_getAbortAdress());
 
+        /*
         if( mc_isUndefAdress() ){
                 print("Reseason: Undefined AdressSpace\n");
         }else if( mc_isMisalignment() ){
@@ -154,7 +162,9 @@ int handle_data_abort(struct reg_info *reg)
         }else{
                 print("Error while determining reason\n"); 
         }
+        */
         print_reginfo(reg);
+        
         return 1;
 }
 
@@ -179,14 +189,14 @@ int handle_spurious( void )
 void print_cpsr( void )
 {
         unsigned int cpsr = asm_getCPSR();
-        printf("cpsr : [<%b>]\n> \n",cpsr);
+        print("cpsr : [<%x>]\n> \n",cpsr);
 }
 
 //Prints register nr reg, buffered printing, so output will display when interrupt handling is done
 void print_register( unsigned int reg )
 {       
         if( reg > 12 && reg != 14 ){
-                printf("print register can only print register r0 to r12 and r14 := lr \nPlease retry with a register number between 0 and 12 or 14\n >\n");
+                print("print register can only print register r0 to r12 and r14 := lr \nPlease retry with a register number between 0 and 12 or 14\n >\n");
                 return;
         }
         struct reg_info *registers = (struct reg_info *)asm_getRegisters();
@@ -195,24 +205,32 @@ void print_register( unsigned int reg )
         if(reg < 13)
                 reg_contains = registers->r[reg];
         
-        printf("reg_%x : [<%x>]\n", reg,reg_contains);
-}
-
-//Prints all registers, buffered printing, so output will display when interrupt handling is done
-void print_allRegisters( void )
-{       
-        struct reg_info *registers = (struct reg_info *)asm_getRegisters();
-        print_reginfo(registers);
+        print("reg_%x : [<%x>]\n", reg,reg_contains);
 }
 
 //Prints all registers, buffered printing, so output will display when interrupt handling is done
 void print_reginfo( struct reg_info * reg)
 {
-        printf("printing registers...\n");
-        printf("         lr : [<%x>]\n", reg->lr);
-        printf("r11: %x  r10: %x  r9 : %x\n",reg->r[11], reg->r[10], reg->r[9]);
-        printf("r8 : %x  r7 : %x  r6 : %x\n",reg->r[8], reg->r[7], reg->r[6]);
-        printf("r5 : %x  r4 : %x  r3 : %x\n",reg->r[5], reg->r[4], reg->r[3]);
-        printf("r2 : %x  r1 : %x  r0 : %x\n",reg->r[2], reg->r[1], reg->r[0]);
-        printf("> \n");
+        print("printing registers...\n");
+        print("         lr : [<%x>]\n", reg->lr);
+        print("r11: %x  r10: %x  r9 : %x\n",reg->r[11], reg->r[10], reg->r[9]);
+        print("r8 : %x  r7 : %x  r6 : %x\n",reg->r[8], reg->r[7], reg->r[6]);
+        print("r5 : %x  r4 : %x  r3 : %x\n",reg->r[5], reg->r[4], reg->r[3]);
+        print("r2 : %x  r1 : %x  r0 : %x\n",reg->r[2], reg->r[1], reg->r[0]);
+        print("> \n");
+}
+
+//Prints all registers, printing via polling, so output will display during interrupt handling
+void printRegisterStruck( struct registerStruct * reg)
+{
+        print("printing registers...\n");
+        print("         lr_irq   : [<%x>]\n", reg->pc);
+        print("         sp_sys   : [<%x>]\n", reg->sp);
+        print("         lr_sys   : [<%x>]\n", reg->lr);
+        print("         cpsr_sys : [<%x>]\n", reg->cpsr);
+        print("r11: %x  r10: %x  r9 : %x\n",reg->r[11], reg->r[10], reg->r[9]);
+        print("r8 : %x  r7 : %x  r6 : %x\n",reg->r[8], reg->r[7], reg->r[6]);
+        print("r5 : %x  r4 : %x  r3 : %x\n",reg->r[5], reg->r[4], reg->r[3]);
+        print("r2 : %x  r1 : %x  r0 : %x\n",reg->r[2], reg->r[1], reg->r[0]);
+        print("> \n");
 }
