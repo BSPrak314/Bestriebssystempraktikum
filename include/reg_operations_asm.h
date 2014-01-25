@@ -4,8 +4,8 @@
 
 #include <thread.h>
 
+void 		idle( void );
 unsigned int 	asm_getCPSR( void );
-unsigned int 	asm_getSPSRforNewThread( void );
 unsigned int *	asm_getRegisters( void );
 unsigned int	asm_getProcessorMode( void );
 void 		asm_setModeToUNDEFINED( void );

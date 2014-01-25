@@ -31,7 +31,6 @@ struct  aic_interface {
 static volatile
 struct aic_interface * const aic = (struct aic_interface *)AIC;
 
-/* get */
 int aic_readIVR_nr(unsigned int reg)
 {
         if(reg > 31)
@@ -49,8 +48,7 @@ void aic_setSpuriousVector(unsigned int addr)
 void aic_setInterruptVector_nr(unsigned int reg, unsigned int addr)
 {
         if(reg > 31)
-              return;
-        
+              return;        
         aic->AIC_SVR[reg] = addr;
 }
 

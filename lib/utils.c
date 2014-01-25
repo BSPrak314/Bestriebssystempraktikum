@@ -34,15 +34,6 @@ void clearMemory( unsigned int start, unsigned int end)
 	return;
 }
 
-void printStack( unsigned int * stack, unsigned int blocks )
-{
-	unsigned int i = 0;
-	for(;i<blocks;i++){
-		print("sp -4* %x has value : %x\n", i, (unsigned int)*stack );
-		stack++;
-	}
-}
-
 void waitBusy( int loops )
 {
 	for(; loops > 0;loops--)

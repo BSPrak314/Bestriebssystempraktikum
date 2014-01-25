@@ -1,0 +1,106 @@
+/*  Memory_Mapping.info  
+ *  Our currently Memory Management in the internal and external RAM */
+
+// Start of the internal RAM
+	// ADDRESS 0x00200000
+#define IVT_ADDR        0x00200000
+	// - 8 unsigned integers
+	// struct hold the jump instruction, when interrupt occures
+
+	// ADDRESS 0x00200020
+#define JUMP_ADDR       0x00200020
+	// - 8 unsigned integers 8*4 = 32 byte
+	// struct hold the jump pointers to the asm_exeptions_handlers
+
+	// ADDRESS 0x00200040
+#define THEAD_CTRL_BASE 0x00200040
+	// - 3 list structs, each  8 byte
+	// - 2 pointers to thread structs = 32 byte
+
+	// ADDRESS 0x00200060
+#define THEAD_ARRAY_BASE (THEAD_CTRL_BASE + SIZE_OF_THREADCTRL)
+	// contains an ARRAY of 1 + TOTAL_THREADSIZE thread structs
+	// each thread struct contains of 	
+	// 	- an register struct holding 17 integers 	= 68 byte
+	//	- an list struct holding 2 pointers		=  8 byte
+	// 	- 6 unsigned integers formation			= 24 byte 
+	// 	=> 0x64 byte for each thread
+	// define the maximum number of threads, so thread array
+
+#define TOTAL_THREADSIZE 32
+// ...
+// end of THEAD_ARRAY_BASE for 32 threads
+// ADDRESS 0x00200D44
+// ...
+// end of THEAD_ARRAY_BASE for 64 threads
+// ADDRESS 0x002019C4
+// ...
+// end of THEAD_ARRAY_BASE for 128 threads
+// ADDRESS 0x002032C4
+//
+// START FREE SPACE
+// ...
+// END OF INTERNAL RAM FREE SPACE	0x00204000
+
+
+// BEGIN EXTERNAL RAM
+// Our Code is Linked here
+// ADDRESS 0x20000000
+// ... CODE
+// ... CODE
+// ... CODE
+// start of free space, exact address depends on compilation process - currently around 0x20003000 
+// ...
+
+// ADDRESS 0x20100000
+// User Code is Linked Here
+// ... CODE
+// start of free space, exact address depends on compilation process  - currently around 0x20100400
+// ...
+
+#define THREAD_STACKSIZE 0x1000 		// 4kB
+// each thread has its own stackpointer of size THREAD_STACKSIZE, 
+// starting at SP_EXTERNAL_RAM
+// MAPING 0x23FBA000
+// end of stackpointer thread_128
+// ...
+// ...
+// ...
+// MAPING 0x23FDA000
+// end of stackpointer thread_64
+// ...
+// ...
+// MAPING 0x23FEA000
+// end of stackpointer thread_32
+// ...
+// start of stack pointer for thread_1
+
+// ADDRESS 0x23FFA000
+
+// size for stackpointers for each processor mode := 4 KByte = 0x1000
+#define STACKSIZE 0x1000
+
+// ADDRESS 0x23FFA000
+// end of stackpointer system/user mode
+// ...
+// start of stack pointer system/user mode
+// ADDRESS 0x23FFB000
+// ...
+// start of stack pointer fast interrupt mode
+// ADDRESS 0x23FFC000
+// ...
+// start of stack pointer interrupt mode
+// ADDRESS 0x23FFD000
+// ...
+// start of stack pointer for abort mode
+// ADDRESS 0x23FFE000
+// ...
+// start of stack pointer undefined mode
+// ADDRESS 0x23FFF000
+// ...
+// start of stackpointer supervisor mode
+// size for stackpointers for each processor mode := 4 KByte = 0x1000
+// ADDRESS 0x24000000
+// END OF EXTERNAL RAM
+
+// MEMORY ADDRESS FOR DRIVER AND PROCESSOR CONTROL

@@ -1,33 +1,36 @@
-  // Jump funcions to the interrupt handler functions at "interrupt_handler.c"
+  // First writes all register values to stack, then 
+  // jump funcions to the interrupt handler functions at "interrupt_handler.c"
+  // finaly restores register values
 .section .text
 
+// two interrupts can contain an context change
+// irq interrupts during an PIT or TXRDY Interrupt
+// or svc interrupts with an corresponding svc call
+// so we need to save r0-r12 + lr_usr,sp_usr,spsr_irq<>cpsr_irq,lr_irq<>pc_usr
 .global asm_handle_irq
 asm_handle_irq:
-        sub     lr, lr, #4
+        sub      lr, lr, #4                     // adjust lr to next instruction to execute
         stmfd sp!, {r0-r12,lr}                  // save register
-
-        mrs      r12, cpsr                      // load status register
-        orr      r0, r12, #0b1111               // set mode to sys (system mode = 11111)
-        msr      cpsr, r0                       // set status register       
-        mov      r1, sp
-        mov      r2, lr
-        msr      cpsr, r12                      // set status register
-        mrs      r3, spsr
-        stmfd    sp!, {r1-r3}
-        mov      r0, sp
-        
+        mrs      r12, cpsr                      // load status register to r0
+        orr      r0, r12, #0b1111               // adjust r0 to sys_mode (system mode = 11111)
+        msr      cpsr, r0                       // change status register to sys_mode
+        mov      r1, sp                         // get sp_usr/sys
+        mov      r2, lr                         // get lr_usr/sys
+        msr      cpsr, r12                      // back to IRQ
+        mrs      r3, spsr                       // get spsr_irq <> cpsr_irq
+        stmfd    sp!, {r1-r3}                   // save those values to stack_irq
+        mov      r0, sp                         // return pointer to stack_irq
         bl handle_irq                           // execute c-handler
-
-        ldmfd sp!, {r1-r3}
-        msr      spsr, r3
+        ldmfd sp!, {r1-r3}                      // everything rewind
+        msr      spsr, r3                       // restore spsr
         mrs      r12, cpsr                      // load status register
-        orr      r0, r12, #0b1111               // set mode to sys (system mode = 11111)
-        msr      cpsr, r0                       // set status register       
-        mov      sp, r1
-        mov      lr, r2
-        msr      cpsr, r12                      // set status register
+        orr      r0, r12, #0b1111               // adjust r0 to sys_mode (system mode = 11111)
+        msr      cpsr, r0                       // change status register to sys_mode
+        mov      sp, r1                         // restore sp_usr/sys
+        mov      lr, r2                         // restore lr_usr/sys
+        msr      cpsr, r12                      // back to IRQ status register
         ldmfd sp!, {r0-r12,lr}                  // write back register
-        movs pc, lr
+        movs pc, lr                             // -> S-Bit will restore spsr to cpsr / end of handling
 
 .global asm_handle_reset
 asm_handle_reset:
@@ -48,64 +51,77 @@ asm_handle_undef_inst:
 
 .global asm_handle_swi
 asm_handle_swi:
-        stmfd    sp!, {r0-r12,lr}               // save register
-        
-        mrs      r12, cpsr                      // load status register
-        orr      r0, r12, #0b1111               // set mode to sys (system mode = 11111)
-        msr      cpsr, r0                       // set status register       
-        mov      r1, sp
-        mov      r2, lr
-        msr      cpsr, r12                      // set status register
-        mrs      r3, spsr
-        stmfd    sp!, {r1-r3}
-        mov      r0, sp
-        
+        stmfd sp!, {r0-r12,lr}                  // save register
+        mrs      r12, cpsr                      // load status register to r0
+        orr      r0, r12, #0b1111               // adjust r0 to sys_mode (system mode = 11111)
+        msr      cpsr, r0                       // change status register to sys_mode
+        mov      r1, sp                         // get sp_usr/sys
+        mov      r2, lr                         // get lr_usr/sys
+        msr      cpsr, r12                      // back to SVC
+        mrs      r3, spsr                       // get spsr_irq <> cpsr_irq
+        stmfd    sp!, {r1-r3}                   // save those values to stack_irq
+        mov      r0, sp                         // return pointer to stack_svc
         bl handle_swi                           // execute c-handler
-
-        ldmfd    sp!, {r1-r3}
-
-/*        push {r0-r3,r12,lr}
-        ldr  r0, =string2
-        mov r1, r2
-        bl print
-        pop {r0-r3,r12,lr} */
-
-        msr      spsr, r3
+        ldmfd sp!, {r1-r3}                      // everything rewind
+        msr      spsr, r3                       // restore spsr
         mrs      r12, cpsr                      // load status register
-        orr      r0, r12, #0b1111               // set mode to sys (system mode = 11111)
-        msr      cpsr, r0                       // set status register       
-        mov      sp, r1
-        mov      lr, r2
-        msr      cpsr, r12                      // set status register
+        orr      r0, r12, #0b1111               // adjust r0 to sys_mode (system mode = 11111)
+        msr      cpsr, r0                       // change status register to sys_mode
+        mov      sp, r1                         // restore sp_usr/sys
+        mov      lr, r2                         // restore lr_usr/sys
+        msr      cpsr, r12                      // back to SVC status register
         ldmfd sp!, {r0-r12,lr}                  // write back register
-
-/*      push {r0-r3,r12,lr}
-        ldr  r0, =string
-        mov r1, lr
-        bl print
-        pop {r0-r3,r12,lr} */
-        movs pc, lr                             // jump back
-        //string2: .asciz "JumpinX to %x \n"
-        //string: .asciz "Jumping to %x \n"
-
+        movs pc, lr                             // -> S-Bit will restore spsr to cpsr / end of handling
 
 .global asm_handle_prefetch
 asm_handle_prefetch:
         sub     lr, lr, #0x4                    // set lr to instruction where interrupt occurred
         stmfd sp!, {r0-r12,lr}                  // save register
-        mov r0, sp                              // parameter to print out register information
+        mrs      r12, cpsr                      // load status register to r0
+        orr      r0, r12, #0b1111               // adjust r0 to sys_mode (system mode = 11111)
+        msr      cpsr, r0                       // change status register to sys_mode
+        mov      r1, sp                         // get sp_usr/sys
+        mov      r2, lr                         // get lr_usr/sys
+        msr      cpsr, r12                      // back to SVC
+        mrs      r3, spsr                       // get spsr_irq <> cpsr_irq
+        stmfd    sp!, {r1-r3}                   // save those values to stack_irq
+        mov      r0, sp                         // return pointer to stack_svc
         bl handle_prefetch                      // execute c-handler
+        ldmfd sp!, {r1-r3}                      // everything rewind
+        msr      spsr, r3                       // restore spsr
+        mrs      r12, cpsr                      // load status register
+        orr      r0, r12, #0b1111               // adjust r0 to sys_mode (system mode = 11111)
+        msr      cpsr, r0                       // change status register to sys_mode
+        mov      sp, r1                         // restore sp_usr/sys
+        mov      lr, r2                         // restore lr_usr/sys
+        msr      cpsr, r12                      // back to SVC status register
         ldmfd sp!, {r0-r12,lr}                  // write back register
-        adds pc, r14, #0x4                      // jump back
+        movs pc, lr                             // -> S-Bit will restore spsr to cpsr / end of handling
 
 .global asm_handle_data_abort
 asm_handle_data_abort:
-        sub     lr, lr, #0x8                    // set lr to instruction where interrupt occurred
+        sub      lr, lr, #0x8                    // set lr to instruction where interrupt occurred
         stmfd sp!, {r0-r12,lr}                  // save register
-        mov r0, sp                              // parameter to print out register information
+        mrs      r12, cpsr                      // load status register to r0
+        orr      r0, r12, #0b1111               // adjust r0 to sys_mode (system mode = 11111)
+        msr      cpsr, r0                       // change status register to sys_mode
+        mov      r1, sp                         // get sp_usr/sys
+        mov      r2, lr                         // get lr_usr/sys
+        msr      cpsr, r12                      // back to IRQ
+        mrs      r3, spsr                       // get spsr_irq <> cpsr_irq
+        stmfd    sp!, {r1-r3}                   // save those values to stack_irq
+        mov      r0, sp                         // return pointer to stack_irq
         bl handle_data_abort                    // execute c-handler
+        ldmfd sp!, {r1-r3}                      // everything rewind
+        msr      spsr, r3                       // restore spsr
+        mrs      r12, cpsr                      // load status register
+        orr      r0, r12, #0b1111               // adjust r0 to sys_mode (system mode = 11111)
+        msr      cpsr, r0                       // change status register to sys_mode
+        mov      sp, r1                         // restore sp_usr/sys
+        mov      lr, r2                         // restore lr_usr/sys
+        msr      cpsr, r12                      // back to IRQ status register
         ldmfd sp!, {r0-r12,lr}                  // write back register
-        adds pc, r14, #0x4                      // jump back
+        movs pc, lr                             // -> S-Bit will restore spsr to cpsr / end of handling
 
 .global asm_handle_fiq
 asm_handle_fiq:

@@ -3,10 +3,14 @@
 #ifndef _mem_ctrl_H_
 #define _mem_ctrl_H_
 
-void 			mc_remapMemory( void) ;
-unsigned int 	mc_isUndefAdress( void );
-unsigned int 	mc_isMisalignment( void );
+void 		mc_remapMemory( void) ;
 unsigned int 	mc_getAbortAdress( void );
 unsigned int 	mc_getAbortType( void );
+unsigned int    mc_getAbortStatus(void );
+unsigned int 	mc_init_L1_Table( void );
+unsigned int 	mc_init_L2_Tables( void );
+unsigned int 	mc_initMMU( void );
+unsigned int    mc_userStacks_l2table_enabled( void );
+void 		mc_switch_userStack(unsigned int, unsigned int );
 
 #endif

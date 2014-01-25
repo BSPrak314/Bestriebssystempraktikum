@@ -9,9 +9,6 @@
 extern char* infoPIT;
 /* message to print during context change, printed via buffered output, comes from thread.c */
 extern char* infoContextChange; 
-/* enables/disables basic thread test in dbgu, comes from thread.c 
- * 1 = test enabled, 0 = test disabled */
-extern unsigned int thread_test;
 
 extern unsigned int thread_sheduler_enabled;
 
@@ -109,7 +106,6 @@ void systest_dummyThread( void )
                 print("%c",c);
                 waitBusy(800000);
         }
-        thread_exit();
 }
 
 void systest_threadTest( void )
@@ -121,6 +117,5 @@ void systest_threadTest( void )
         infoPIT = "!";
         infoContextChange = "\n";
         /* now in dbgu.c an TXRDY interrupt will create a new thread */
-        thread_test = 1;
         thread_sheduler_enabled = 1;
 }

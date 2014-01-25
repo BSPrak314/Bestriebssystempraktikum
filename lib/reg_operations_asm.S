@@ -1,15 +1,12 @@
 
+.global idle
+idle:
+        mcr     p15, 0, r0, c7, c0, 4
+        b       idle
+
 .global asm_getCPSR
 asm_getCPSR:
         mrs      r0, cpsr                       // load status register
-        mov      pc, lr                         // jump back
-
-.global asm_getSPSRforNewThread
-asm_getSPSRforNewThread:
-        mrs      r0, cpsr                       // load status register
-        orr      r0, r0, #0b11111                  // set mode bits to system mode ; logical ORR
-        //bic      r0, #0xf0000000                // now clear 4 msbits, the N-,Z-,C-,V- bit ; BitClear
-        bic      r0, r0, #0b110000000                  // enable IRQ by clearing 7th bit
         mov      pc, lr                         // jump back
 
 .global asm_getRegisters

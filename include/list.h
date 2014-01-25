@@ -1,6 +1,8 @@
 #ifndef _list_h_
 #define _list_h_
 
+#define SIZE_OF_LIST 8
+
 struct list{
 		struct list *prev;
 		struct list *next;

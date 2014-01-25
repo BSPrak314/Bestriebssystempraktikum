@@ -4,24 +4,32 @@
 
 #include <list.h>
 
-#define THEAD_CTRL_BASE 0x00200040
-#define THEAD_ARRAY_BASE 0x0020005c
+#define THEAD_CTRL_BASE 	0x00200040
+#define THEAD_ARRAY_BASE 	(THEAD_CTRL_BASE + SIZE_OF_THREADCTRL)
 
-#define SP_EXTERNAL_RAM 0x24000000
-// Stacksize: 2 kByte
-#define THREADSTACKSIZE (2 * 1024)		
+#define USERSTACK_BASE  	0x23E00000
+// Stacksize: 4 kByte
+#define THREAD_STACKSIZE (4 * 1024)
+
+#define SWI_WRITE 	0x0FF000
+#define SWI_READ 	0x0F0000
+#define SWI_KILL 	0xFFFFFF
+#define SWI_CREATE 	0x00000F
+#define SWI_WAIT 	0x0000FF
+#define SWI_YIELD 	0x000FFF
 
 #define DEAD 0
 #define ACTIVE 1
 #define RUNNING 2
 #define SLEEPING 3
+#define WAIT_INPUT 4
 
-#define MAX_THREADS 32
+#define MAX_THREADS 16
 
 #define NR_OF_REGS 13
-#define SIZE_OF_REGISTER_STRUCT (17*4) 	  // = 68 byte
-#define SIZE_OF_THREAD (17*4 + 2 + 5*4)   // = 90 byte
-#define SIZE_OF_THREADCTRL (3*2*4 + 4) 	  // = 28 byte
+#define SIZE_OF_REGISTER_STRUCT ( (NR_OF_REGS+4)*4 )
+#define SIZE_OF_THREAD 		( 6*4 +SIZE_OF_LIST +SIZE_OF_REGISTER_STRUCT )
+#define SIZE_OF_THREADCTRL 	( 2*4 + 3*SIZE_OF_LIST )
 
 struct registerStruct{
 	unsigned int sp;
@@ -34,11 +42,13 @@ struct registerStruct{
 struct thread{
 	struct list connect;
 	unsigned int status;
-	struct registerStruct regs;
 	unsigned int inital_sp;
 	unsigned int pos;
+	// optional could be extracted from inital_sp
 	unsigned int id;
 	unsigned int timestamp;
+	unsigned int wakeTime;
+	struct registerStruct regs;
 };
 
 struct threadArray{
@@ -51,13 +61,16 @@ struct threadQueue{
 	struct list emptyList;
 	struct list activeList;
 	struct list sleepingList;
+	struct thread *curr_IO;
 };
 
-int 	thread_enableThreads( void );
+int 	thread_initThreadControl( void );
 int 	thread_runSheduler( struct registerStruct * );
 int 	thread_create( void * function, void * params, struct registerStruct * );
-int 	thread_yield( void );
-int 	thread_exit( void );
-int 	thread_dealWithSWI(unsigned int swiCode, struct registerStruct * regStruct );
+int 	thread_dealWithSWI( unsigned int swiCode, struct registerStruct * regStruct );
+int 	thread_wakeUp( struct registerStruct * regStruct );
+int 	thread_infoAboutInput( struct registerStruct * regStruct );
+int 	thread_kill( struct registerStruct * regStruct );
+unsigned int thread_getRunningID( void );
 
 #endif

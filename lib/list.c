@@ -120,7 +120,6 @@ struct list * list_popHead(struct list *list)
 		list_clean(out);
 		return out;
 	}
-
 	list->next = list->next->next;
 	list->next->prev = 0;
 	list_clean(out);
@@ -158,26 +157,21 @@ struct list * list_getTail(struct list *list)
 
 void list_removeElement( struct list *list, struct list *element )
 {
-	if( !element->prev && !element->next ){
-		list_clean(list);
-		element->prev = 0;
-		element->next = 0;
-		return;
-	}
-	if( element->prev ){
-		if( element->next ){
-			element->next->prev = element->prev;
-			element->prev->next = element->next;
-			element->next = 0;
-			element->prev = 0;
-		}else{
-			list->prev = element->prev;
-			list->prev->next = 0;
-		}
-	}else{
+	if(list->next == element){
 		list->next = element->next;
 		list->next->prev = 0;
+		list_clean(element);
+		return;
 	}
+	if(list->prev == element){
+		list->prev = element->prev;
+		list->prev->next = 0;
+		list_clean(element);
+		return;
+	}
+
+	element->next->prev = element->prev;
+	element->prev->next = element->next;
 
 	return;
 }

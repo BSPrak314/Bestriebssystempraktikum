@@ -6,6 +6,5 @@ void 	waitBusy( int );
 int 	strCompare( char* , char* );
 int 	startsWith( char* , char* );
 void 	clearMemory( unsigned int , unsigned int );
-void 	printStack( unsigned int * , unsigned int );
 
 #endif 

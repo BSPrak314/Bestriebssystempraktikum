@@ -43,13 +43,13 @@ void init_IVT(void)
         jump_inst->IRQ                  = LD_PC_PC_OFF18;
         jump_inst->FIQ                  = LD_PC_PC_OFF18;
         //Putting struct to ivt + 0x18 for junp to (asm-)handling
-        jump_add->RESET                 = (unsigned int)asm_handle_reset;
-        jump_add->undef_instr           = (unsigned int)asm_handle_undef_inst;
-        jump_add->sw_inter              = (unsigned int)asm_handle_swi;
-        jump_add->prefetch_abort        = (unsigned int)asm_handle_prefetch;
-        jump_add->data_abort            = (unsigned int)asm_handle_data_abort;
-        jump_add->IRQ                   = (unsigned int)asm_handle_irq;
-        jump_add->FIQ                   = (unsigned int)asm_handle_fiq;
+        jump_add->RESET                 = (unsigned int)&asm_handle_reset;
+        jump_add->undef_instr           = (unsigned int)&asm_handle_undef_inst;
+        jump_add->sw_inter              = (unsigned int)&asm_handle_swi;
+        jump_add->prefetch_abort        = (unsigned int)&asm_handle_prefetch;
+        jump_add->data_abort            = (unsigned int)&asm_handle_data_abort;
+        jump_add->IRQ                   = (unsigned int)&asm_handle_irq;
+        jump_add->FIQ                   = (unsigned int)&asm_handle_fiq;
 
         /* currently no swi test -> threads.c should deal with swi interrups */
         swi_test = 0;
@@ -58,18 +58,14 @@ void init_IVT(void)
 //IRQ Handler
 int handle_irq( struct registerStruct * regStruct )
 {
-        //print("regStruct from IRQ\n");
-        //printRegisterStruck(regStruct);
-    
-        /* first check if some SystemTimer has triggered
-         * SystemTimer should check the status register and deal with triggered Interrupts */
+        // first check if some SystemTimer has triggered
+        // SystemTimer should check the status register and deal with triggered Interrupts
         st_dealWithInterrupts( regStruct );
-        
-        /* if DBGU Interrupt has triggered - dbgu.c should deal with it  
-         * let the dbgu check and deal with them if necessary  */
+        // if DBGU Interrupt has triggered - dbgu.c should deal with it  
+        // let the dbgu check and deal with them if necessary
         dbgu_dealWithInterrupts( regStruct );
         
-        /* clear Interrupt on Line1 and signal to aic interrupt handling is completed */
+        // clear Interrupt on Line1 and signal to aic interrupt handling is completed
         aic_clearInterrupt_nr(1);
         aic_endOfInterrupt(); 
         return 1;
@@ -79,19 +75,71 @@ int handle_irq( struct registerStruct * regStruct )
 int handle_reset()
 {
         print("reset interrupt\n");
-        /* provoke a reset by setting watchdog Value to 0
-         * enabling Reset via Watchdog and Watchdog timer */
+        // provoke a reset by setting watchdog Value to 0
+        // enabling Reset via Watchdog and Watchdog timer
         st_setWatchdogValue(0x00000001);
-        //st_enableWatchdogReset();
+        st_enableWatchdogReset();
         st_enableWDT();
         return 1;
 }
+
+void interrupt_printInterruptInfo(char *interrupt_name, struct registerStruct *reg, unsigned int mode)
+{
+        print("\n  %s  ",interrupt_name);
+
+        switch( mode ){
+        case 0x1F :
+                print(" in SYSTEM Mode\n");
+                break;
+        case 0x10 :
+                print(" in  USER  Mode\n");
+                break;
+        case 0x11 :
+                print(" in FAST INTERRUPT  Mode\n");
+                break;
+        case 0x12 :
+                print(" in INTERRUPT  Mode\n");                
+                break;
+        case 0x13 :
+                print(" in SUPERVISOR Mode\n");
+                break;
+        case 0x17 :
+                print(" in ABORT      Mode\n");
+                break;
+        case 0x1B :
+                print(" in UNDEFINED  Mode\n");
+                break;
+        }
+
+        print("  Register Values :      \n");
+        print_RegisterStruct(reg);
+        print("\n");
+}
+
+void interrupt_printHandling(unsigned int mode)
+{
+        if( mode == 0x10){
+                unsigned int runningID = thread_getRunningID();
+                unsigned int runningPos = (runningID << 24);
+                runningPos = (runningPos >> 24);
+                print("\n  Handling:\n");
+                print("  Kill causing Thread\n");
+                print("  Position: %x\n",runningPos);
+                print("  ID      : %x\n",runningID);
+                print("\n");
+                return;
+        }
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+        print("* JUMP BACK *\n");
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n");
+}
+
 //Undefined Instruction-Handler
 /* very basic handler - printing out register information */
-int handle_undef_inst(struct reg_info *reg)
+int handle_undef_inst(struct registerStruct *reg)
 {       
-        print("undefined instruction at:\n");
-        print_reginfo(reg);
+        unsigned int mode = reg->cpsr & 0x0000001F;
+        interrupt_printInterruptInfo("UNDEFINED INSTRUCTION", reg, mode);
         return 1;
 }
 //Software Interrupt Handler
@@ -101,70 +149,92 @@ int handle_swi(struct registerStruct *reg)
 {        
         // extract coded SWI instruction from link register
         // performing shifts to clear out swi operation, 
-        // leaving only offset coding the instruction 
-        unsigned int * address = (unsigned int * )(reg->pc - 4);
-        unsigned int instr = *address;
-        
+        // leaving only offset coding the instruction
+        unsigned int instr = *(unsigned int *)(reg->pc-4);
         instr = (instr << 8);
         instr = (instr >> 8);
 
-        // swi_test is defined here and shared with lib/systemtest.c
-        if( swi_test ){
+        // swi_test is above and shared with lib_system/systemtest.c
+        if( ! swi_test ){
+                thread_dealWithSWI(instr, reg);
+        }else{
                 print("software interrupt has infoTag : %x\n",instr);
                 print("software interrupt at:\n");
-                printRegisterStruck(reg);
-        }else{
-                thread_dealWithSWI(instr, reg);
+                print_RegisterStruct(reg);
         }
+
         return 1;
 }
 //Prefetch Handler
 /* very basic handler - printing out register information */
-int handle_prefetch(struct reg_info *reg)
+int handle_prefetch(struct registerStruct *reg)
 {        
-        print("prefetch abort at:\n");
-        print_reginfo(reg);
+        unsigned int mode = reg->cpsr & 0x0000001F;
+        interrupt_printInterruptInfo("PREFETCH  ABORT      ", reg, mode);
+
+        interrupt_printHandling(mode);
+        if( mode == 0x10 ){
+                return thread_kill(reg);
+        }
         return 1;
 }
 //Data Abort Handler
-/* basic handler - printing out register information 
- * and some info about the sorce of the data abort */
-int handle_data_abort(struct reg_info *reg)
+int handle_data_abort(struct registerStruct *reg)
 {
-        print("data abort during:\n");
-
-        
-        switch( mc_getAbortType() ){
-        case 0 : {
-                print("data read\n"); break;
-                }
-        case 1 : {
-                print("data write\n"); break;
-                }
-        case 2 : {
-                print("code fetch\n"); break;
-                }
-        case 3 : {
-                print(">reserved<\n"); break;
-                }
-        default : {
-                print("Error in mc_getAbortType\n");
-                }
+        unsigned int mode = reg->cpsr & 0x0000001F;
+        interrupt_printInterruptInfo("DATA      ABORT      ", reg, mode);
+        int type = mc_getAbortType();
+        if( type <= 0 && type < 9 && type != 3 && type != 5 && type != 7 )
+                print("  Modified Virtual Address was:\nMVA:  [> %x <]\n",mc_getAbortAdress());
+        print("  Data Abort caused by:\n");
+        switch( type ){
+        case 1 :
+                print(" -> Alignment abort\n");
+                break;
+        case 2 : 
+                print(" -> Translation abort for section\n");
+                break;
+        case 3 :
+                print(" -> Translation abort for page\n");
+                break;
+        case 4 : 
+                print(" -> Domain abort for section\n");
+                break;
+        case 5 :
+                print(" -> Domain abort for page\n");
+                break;
+        case 6 : 
+                print(" -> Permission abort for section\n");
+                break;
+        case 7 : 
+                print(" -> Permission abort for page\n");
+                break;
+        case 8 : 
+                print(" -> External abort for section,\n   noncachable nonbufferable access or noncachable bufferable read\n");
+                break;
+        case 9 : 
+                print(" -> External abort for page,\n   noncachable nonbufferable access or noncachable bufferable read\n");
+                break;
+        default : 
+                print("!!! ERROR in mc_getAbortType !!!!!\n");
+        }
+        switch( mc_getAbortStatus() ){
+        case 0 :
+                print(" -> during data read\n");
+                break;
+        case 1 :
+                print(" -> during data write\n"); 
+                break;
+        case 2 :
+                print(" -> during code fetch\n"); 
+                break;
+        default : ;
         }
 
-        print("at Adress %x \n",mc_getAbortAdress());
-
-        /*
-        if( mc_isUndefAdress() ){
-                print("Reseason: Undefined AdressSpace\n");
-        }else if( mc_isMisalignment() ){
-                print("Reseason: Data Misalignment\n");
-        }else{
-                print("Error while determining reason\n"); 
+        interrupt_printHandling(mode);
+        if( mode == 0x10 ){
+                return thread_kill(reg);
         }
-        */
-        print_reginfo(reg);
-        
         return 1;
 }
 
@@ -183,54 +253,4 @@ int handle_spurious( void )
 {        
         print("spurious interrupt\n");
         return 1;
-}
-
-//Prints CPSR in binaer coding, buffered printing, so output will display when interrupt handling is done
-void print_cpsr( void )
-{
-        unsigned int cpsr = asm_getCPSR();
-        print("cpsr : [<%x>]\n> \n",cpsr);
-}
-
-//Prints register nr reg, buffered printing, so output will display when interrupt handling is done
-void print_register( unsigned int reg )
-{       
-        if( reg > 12 && reg != 14 ){
-                print("print register can only print register r0 to r12 and r14 := lr \nPlease retry with a register number between 0 and 12 or 14\n >\n");
-                return;
-        }
-        struct reg_info *registers = (struct reg_info *)asm_getRegisters();
-        
-        unsigned int reg_contains = registers->lr;
-        if(reg < 13)
-                reg_contains = registers->r[reg];
-        
-        print("reg_%x : [<%x>]\n", reg,reg_contains);
-}
-
-//Prints all registers, buffered printing, so output will display when interrupt handling is done
-void print_reginfo( struct reg_info * reg)
-{
-        print("printing registers...\n");
-        print("         lr : [<%x>]\n", reg->lr);
-        print("r11: %x  r10: %x  r9 : %x\n",reg->r[11], reg->r[10], reg->r[9]);
-        print("r8 : %x  r7 : %x  r6 : %x\n",reg->r[8], reg->r[7], reg->r[6]);
-        print("r5 : %x  r4 : %x  r3 : %x\n",reg->r[5], reg->r[4], reg->r[3]);
-        print("r2 : %x  r1 : %x  r0 : %x\n",reg->r[2], reg->r[1], reg->r[0]);
-        print("> \n");
-}
-
-//Prints all registers, printing via polling, so output will display during interrupt handling
-void printRegisterStruck( struct registerStruct * reg)
-{
-        print("printing registers...\n");
-        print("         lr_irq   : [<%x>]\n", reg->pc);
-        print("         sp_sys   : [<%x>]\n", reg->sp);
-        print("         lr_sys   : [<%x>]\n", reg->lr);
-        print("         cpsr_sys : [<%x>]\n", reg->cpsr);
-        print("r11: %x  r10: %x  r9 : %x\n",reg->r[11], reg->r[10], reg->r[9]);
-        print("r8 : %x  r7 : %x  r6 : %x\n",reg->r[8], reg->r[7], reg->r[6]);
-        print("r5 : %x  r4 : %x  r3 : %x\n",reg->r[5], reg->r[4], reg->r[3]);
-        print("r2 : %x  r1 : %x  r0 : %x\n",reg->r[2], reg->r[1], reg->r[0]);
-        print("> \n");
 }

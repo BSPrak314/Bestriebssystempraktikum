@@ -1,7 +1,7 @@
 #ifndef _buffer_H_
 #define _buffer_H_
 
-#define BUFFERSIZE 200
+#define BUFFERSIZE 800
 #define BUSYWAIT 0
 #define OVERWRITE 1
 #define IGNORE 2

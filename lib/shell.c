@@ -11,11 +11,21 @@
 
 #include <list.h>
 
+#define SHELLBUF_SIZE 80
+
 void reboot( void )
 {
 	st_setWatchdogValue(0x00000001);
 	st_enableWatchdogReset();
 	st_enableWDT();
+}
+
+static void cleanDisplay( void )
+{
+	int i = 0;
+	for(i = 0;i<40;i++)
+		printf("\n");
+	printf("> ");
 }
 
 static void printInfo( char* string )
@@ -31,7 +41,7 @@ static void printInfo( char* string )
 		return;
 	}else if( startsWith(string, registers) ){
 		//print_allRegisters();
-		print("currently no implemented - sorry\n> ");
+		printf("currently no implemented - sorry\n> ");
 		return;
 	}
 	/*
@@ -40,7 +50,7 @@ static void printInfo( char* string )
 		return;
 	}*/
 	printf("> can not recognize print attributes\n");
-	printf("> type print <cpsr|registers|list>\n>");
+	printf("> type print <cpsr|registers|list>\n> ");
 	return;
 }
 
@@ -59,12 +69,11 @@ static void doTests( char* string )
 		return;
 	}
 	else if( startsWith(string, list) ){
-		//list_testListStruct();
 		list_testEmbeddedListStruct();
 		return;
 	}
 	printf("> can not recognize test to run\n");
-	printf("> type test <bufferedIO|threads|list>\n>");
+	printf("> type test <bufferedIO|threads|list>\n> ");
 	return;
 }
 
@@ -83,7 +92,7 @@ static void provokeInterrupt( char* string )
 		systest_provoke_undef_inst();
 	}else{
 		printf("> can not recognize interrupt type\n");
-		printf("> type provoke <abort|software|undefined> to provoke interrupts\n>");
+		printf("> type provoke <abort|software|undefined> to provoke interrupts\n> ");
 	}
 }
 
@@ -127,16 +136,12 @@ static void usingLeds( char* string )
 		}
 	}
 	printf("> can not recognize led attributes\n");
-	printf("> type led <red|green|yellow> <on|off>\n>");
+	printf("> type led <red|green|yellow> <on|off>\n> ");
 	return;
 }
 
 void shell_start( void )
 {
-
-	//list_testListStruct();
-	//list_testEmbeddedListStruct();
-
 	char* help = "help";
 	char* boot = "reboot";
 	char* provoke = "provoke";
@@ -145,15 +150,16 @@ void shell_start( void )
 	char* regCheck = "regchecker";
 	char* currenttest = "current test";
 	char* test = "test";
+	char* clean = "clean";
 	
-	char *info = "implemented commands:\n -> led <red|green|yellow> <on|off>\n -> reboot\n -> print <cpsr|registers>\n -> provoke <abort|software|undefined>\n -> test <bufferedIO|threads|list>\n -> currenttest\n -> regchecker\n> \n";
+	char *info = "implemented commands:\n -> led <red|green|yellow> <on|off>\n -> reboot\n -> print <cpsr|registers>\n -> provoke <abort|software|undefined>\n -> test <bufferedIO|threads|list>\n -> currenttest\n -> regchecker\n -> clean\n> \n";
 
 	char enter = '\n';
 
-	char buf[BUFFERSIZE];
+	char buf[SHELLBUF_SIZE];
 	printf("> type help to show all implemented commands\n");
 	printf("> type regchecker to start register_checker routine\n");
-	printf("> type current test to start testroutine for the 4th excersise\n");
+	printf("> type current test to start testroutine for the 5th excersise\n");
 	printf("> type exit during current test to end the test\n> \n> ");
 	
 	int i = 0;
@@ -161,14 +167,14 @@ void shell_start( void )
 	while(1){
 
 		char c = 0;
-	    
-	    if( dbgu_hasBufferedInput() ){
-        	c = dbgu_nextInputChar();
-        	buf[i] = c;
-        }
-
-		if(i >= BUFFERSIZE)
+	    	
+	    	if(i >= SHELLBUF_SIZE)
 			i = 0;
+
+	    	if( dbgu_hasBufferedInput() ){
+        		c = dbgu_nextInputChar();
+        		buf[i] = c;
+        	}
 	      
 		if(c == enter){
 			dbgu_bufferedOutput(c);
@@ -188,18 +194,18 @@ void shell_start( void )
 				doTests(buf);
 			}else if( startsWith(buf, currenttest) ){
 				systest_threadTest();
+			}else if( startsWith(buf, clean) ){
+				cleanDisplay();
 			}
-			
 			i = 0;
-			printf("> ");
+			printf("\n> ");
 		
 		}else if(0x7F == (int)c){
 			dbgu_bufferedOutput('\b');
 			dbgu_bufferedOutput(' ');
 			dbgu_bufferedOutput('\b');
-			i--;
-			
-	    }else if( c != 0){
+			i--;	
+		}else if( c != 0){
 			dbgu_bufferedOutput(c);
 			buf[i] = c;
 			i++;

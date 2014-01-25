@@ -37,8 +37,6 @@
  * DBGU_IMR to get the status of the corresponding interrupt
  */
 
-extern unsigned int thread_test;
-
 struct dbgu_interface {
         unsigned int DBGU_CR;           /* Write-only */
         unsigned int DBGU_MR;           /* Read & Write */
@@ -154,11 +152,8 @@ void dbgu_dealWithInterrupts( struct registerStruct * regStruct )
 {
         if( dbgu_triggeredRXRDY() ){
                 dbgu_inputBuffering();
-                if(thread_test){
-                    thread_create((unsigned int *)systest_dummyThread, 0, regStruct );
-                }
+                thread_infoAboutInput( regStruct );
         }
-        /*
         if( dbgu_triggeredTXRDY() ){
                 if( dbgu_hasBufferedOutput() ){
                         dbgu_outputBufferPrint();
@@ -167,7 +162,6 @@ void dbgu_dealWithInterrupts( struct registerStruct * regStruct )
                         dbgu_cleanOutputBuffer();
                 }
         }
-        */
 }
 
 /* return 1 (true) if Interrupt is enabled and corresponding status bit is set - 0 (false) otherwise
