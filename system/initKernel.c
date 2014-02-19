@@ -60,8 +60,6 @@ void startOS(void)
 	yellow_off();
 	green_off();
 
-	syscall_thread_create((void*)&app_run_app6,(void*)0);
+	syscall_newProcess((void*)&app_run_app7,(void*)0);
 
-	while(1)
-		;
 }

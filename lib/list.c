@@ -2,36 +2,31 @@
 #include <list.h>
 #include <printf.h>
 
-struct intList{
-		struct list eList;
-		int nr;
-};
-
 void list_initList( struct list * newList )
 {
-	newList->prev = 0;
-	newList->next = 0;
+	newList->prev = newList;
+	newList->next = newList;
 };
 
 struct list list_newListStruct( void )
 {
 	struct list newList;
-	newList.prev = 0;
-	newList.next = 0;
+	newList.prev = &newList;
+	newList.next = &newList;
 	return newList;
 };
 
 void list_clean( struct list *list )
 {
-	list->prev = 0;
-	list->next = 0;
+	list->prev = list;
+	list->next = list;
 }
 
 unsigned int list_getSize(struct list *list)
 {
 	unsigned int out = 0;
 	struct list * tmp = list->next;
-	while( tmp ){
+	while( tmp != list){
 		tmp = tmp->next;
 		out++;
 	}
@@ -40,12 +35,12 @@ unsigned int list_getSize(struct list *list)
 
 int list_isEmpty(struct list *list)
 {
-	return list->next == 0;
+	return list->next == list && list->prev == list;
 }
 
 int list_hasElements(struct list *list)
 {
-	return list->next != 0;
+	return list->next != list && list->prev != list;
 }
 
 void list_addHead( struct list *list, struct list *element )
@@ -58,7 +53,7 @@ void list_addHead( struct list *list, struct list *element )
 	}
 	list->next->prev = element;
 	element->next = list->next;
-	element->prev = 0;
+	element->prev = element;
 	list->next = element;
 }
 
@@ -66,13 +61,15 @@ void list_addTail( struct list *list, struct list *element )
 {
 	list_clean(element);
 	if( list_isEmpty(list) ){
+	
 		list->prev = element;
 		list->next = element;
 		return;
 	}
-	list->prev->next = element;
+	
+	list->prev->next = element;	
 	element->prev = list->prev;
-	element->next = 0;
+	element->next = element;
 	list->prev = element;
 }
 
@@ -88,7 +85,7 @@ void list_removeHead(struct list *list)
 	}
 
 	list->next = list->next->next;
-	list->next->prev = 0;
+	list->next->prev = list->next;
 	return;		
 }
 
@@ -104,24 +101,26 @@ void list_removeTail(struct list *list)
 	}
 
 	list->prev = list->prev->prev;
-	list->prev->next = 0;
+	list->prev->next = list->prev;
 	return;
 }
 
 struct list * list_popHead(struct list *list)
 {
-	if(!list->next){
+	if(!list)
+		return 0;
+	if( list->next == list){
 		return 0;
 	}
 	struct list * out = list->next;
 	if(list->next == list->prev){
-		list->next = 0;
-		list->prev = 0;
+		list->next = list;
+		list->prev = list;
 		list_clean(out);
 		return out;
 	}
 	list->next = list->next->next;
-	list->next->prev = 0;
+	list->next->prev = list->next;
 	list_clean(out);
 	return out;		
 }
@@ -133,14 +132,14 @@ struct list * list_popTail(struct list *list)
 	}
 	struct list * out = list->prev;
 	if(list->next == list->prev){
-		list->next = 0;
-		list->prev = 0;
+		list->next = list;
+		list->prev = list;
 		list_clean(out);
 		return out;
 	}
 
 	list->prev = list->prev->prev;
-	list->prev->next = 0;
+	list->prev->next = list->prev;
 	list_clean(out);
 	return out;
 }
@@ -176,6 +175,7 @@ void list_removeElement( struct list *list, struct list *element )
 	return;
 }
 
+/*
 void list_testEmbeddedListStruct( void )
 {
 	struct list emptyBase = list_newListStruct();
@@ -296,3 +296,4 @@ void list_testEmbeddedListStruct( void )
 
 	print("\nshould be 9 iterations : %x\nDONE\nEND OF TESTING embedded list struct\n",i);
 }
+*/

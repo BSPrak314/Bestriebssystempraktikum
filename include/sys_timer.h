@@ -24,7 +24,7 @@ void    st_disableRTT( void );
 void    st_disableAlarmInterrupt( void );
 int     st_dealWithInterrupts( struct registerStruct * );
 void 	st_handlePIT( struct registerStruct * );
-void 	st_handleAlarmInterrupt( struct registerStruct * regStruct );
+void 	st_handleAlarmInterrupt( void );
 int 	st_getStatusRegister( void );
 int 	st_getTimeStamp(void) ;
 int     st_triggeredPIT( unsigned int );

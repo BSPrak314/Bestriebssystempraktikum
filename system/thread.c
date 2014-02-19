@@ -9,41 +9,31 @@
 #include <interrupt_handler.h>
 #include <reg_operations_asm.h>
 #include <mem_ctrl.h>
+#include <mmu_asm.h>
 
-#define TIMESLICE 0x00000200
-#define CRITICAL_WAIT_TIME 201
-
-/* flag to enable PIT-Interrupts to call thread_runSheduler, shared with sys_timer.c */
-unsigned int thread_sheduler_enabled;
-
-/* message to print during context change, printed via buffered output */
-char* infoContextChange;
-/* defined in sys_timer, message to print with each PIT-Interrupt */
-extern char* infoPIT;
+#define TIMESLICE 		400
+#define with_VIRTUAL_STACK      1
 
 /* thread control structure */
 static
 struct threadQueue * const thread_ctrl = (struct threadQueue *)THEAD_CTRL_BASE;
 /* thread array */
 static
+struct add_Space_ctrl * const add_space_ctrl = (struct add_Space_ctrl *)SPACE_CTRL_BASE;
+
+static
 struct threadArray * const all = (struct threadArray *)THEAD_ARRAY_BASE;
 
-/* idle Mode - disable Processor Clock for IDLE MODE, every System interrupt enables Processor Clock again 
- *           - disable Periodic Intervall Interrupt, cause there are no running threads */
-static void thread_startIdle( void )
-{
-	pmc_disableProcessorClock();
-	st_disablePIT();
-}
 
-/* Idle Thread - calls startIdle in an endless loop */
 static void thread_idleThread( void )
 {
-	thread_startIdle();
+	/*
 	while(1){
-		thread_startIdle();
-	}
-	idle();
+		pmc_disableProcessorClock();
+		st_disablePIT();
+	*/
+		idle();
+	//}
 }
 
 /* each threads get an individual id 
@@ -52,8 +42,8 @@ static void thread_idleThread( void )
 static void thread_createID( struct thread * thread )
 {
 	thread->id = st_getTimeStamp();
-	thread->id = (thread->id << 8);
-	thread->id += thread->pos;
+	thread->id &= 0x00ffffff;
+	thread->id += (thread->pos << 24);
 }
 
 /* init Idle Thread struct */
@@ -73,6 +63,7 @@ static void thread_initIdleThread( void )
 	all->idleThread.regs.lr = (unsigned int)&thread_idleThread;
 	all->idleThread.regs.cpsr = 0x0000001f;
 	all->idleThread.pos = MAX_THREADS;
+	all->idleThread.address_Space = 15;
 	thread_createID( &(all->idleThread) );
 	all->idleThread.timestamp = st_getTimeStamp();
 }
@@ -85,14 +76,6 @@ static void thread_initIdleThread( void )
  *                    - the last active thread is dead, to switch to idle */
 static int thread_contextChange( struct thread * newThread, struct registerStruct * regStruct )
 {
-
-	print(infoContextChange);
-
-	
-	if( mc_userStacks_l2table_enabled() ){
-		mc_switch_userStack(thread_ctrl->running->pos, newThread->pos);
-	}
-	
 	// running thread is not dead - save its register values, in coresponding thread struct
 	if(thread_ctrl->running->status != DEAD && thread_ctrl->running->pos != MAX_THREADS){
 		memcpy( &(thread_ctrl->running->regs), regStruct, SIZE_OF_REGISTER_STRUCT);
@@ -117,6 +100,9 @@ static int thread_contextChange( struct thread * newThread, struct registerStruc
 	thread_ctrl->running = newThread;
 	thread_ctrl->running->status = RUNNING;
 	thread_ctrl->running->timestamp = st_getTimeStamp();
+
+	mc_fastContextSwitch(thread_ctrl->running->address_Space);
+
 	return thread_ctrl->running->id;
 }
 
@@ -125,10 +111,51 @@ static int thread_contextChange( struct thread * newThread, struct registerStruc
  * next thread get his full timeslice, next thread will be determined by our sheduler */
 int thread_kill( struct registerStruct * regStruct )
 {	
-	thread_ctrl->running->status = DEAD;
-	st_setPeriodicValue(TIMESLICE);
+	struct thread * deadThread = thread_ctrl->running;
 
-	return thread_runSheduler(regStruct);
+	deadThread->status = DEAD;
+
+	unsigned int domain = deadThread->address_Space;
+
+	mc_disableStack_forThread(deadThread->pos, domain);
+
+	add_space_ctrl->spaces[domain-1].running_threads--;
+
+	if( !add_space_ctrl->spaces[domain-1].running_threads ){
+		int i = 0;
+		for(;i<NR_OF_EMPTYPAGES;i++){
+			if( add_space_ctrl->emptyPages[i] == domain )
+				add_space_ctrl->emptyPages[i] = 0;
+		}
+	}
+
+	st_setPeriodicValue(TIMESLICE);
+	return thread_runSheduler(regStruct, 0);
+}
+
+static int nextPage(unsigned int domain)
+{
+	int i = 0;
+	for(;i<NR_OF_EMPTYPAGES;i++){
+		if( !add_space_ctrl->emptyPages[i])
+			break;
+	}
+	if( i == NR_OF_EMPTYPAGES )
+		return -1;
+	add_space_ctrl->emptyPages[i] = domain;
+	return i;
+}
+
+static int thread_needsMemory( void )
+{
+	int page = nextPage(thread_ctrl->running->address_Space);
+	if( page < 0){
+		print("thread called: more Memory\n");
+		print("out of Memory\n");
+		return 0;
+	}
+	add_space_ctrl->spaces[thread_ctrl->running->address_Space-1].pages++;
+	return mc_allocMemory(page,thread_ctrl->running->address_Space, add_space_ctrl->spaces[thread_ctrl->running->address_Space-1].pages );
 }
 
 /* thread_wait calls this funciton via SWI-interrupt
@@ -141,7 +168,7 @@ int thread_kill( struct registerStruct * regStruct )
 	thread_ctrl->running->status = SLEEPING;
 	st_setPeriodicValue(TIMESLICE);
 	st_enableAlarmInterrupt();
-	return thread_runSheduler(regStruct);
+	return thread_runSheduler(regStruct, 0);
 }
 
 /* thread_yield calls this funciton via SWI-interrupt
@@ -152,7 +179,7 @@ int thread_kill( struct registerStruct * regStruct )
 static int thread_calledYield( struct registerStruct * regStruct )
 {
 	st_setPeriodicValue(TIMESLICE);
-	return thread_runSheduler(regStruct);
+	return thread_runSheduler(regStruct, 0);
 }
 
 /* current running thread called asm_swi_read
@@ -161,6 +188,7 @@ static int thread_calledRead( struct registerStruct * regStruct )
 {
 	if( dbgu_hasBufferedInput() ){
 		char c = dbgu_nextInputChar();
+		regStruct->r[0] = (int)c;
 		return (int)c;
 	}
 	// syscall_readChar will wait 10 minutes for an char
@@ -168,7 +196,7 @@ static int thread_calledRead( struct registerStruct * regStruct )
 	thread_ctrl->running->status = WAIT_INPUT;
 	st_setPeriodicValue(TIMESLICE);
 	st_enableAlarmInterrupt();
-	thread_runSheduler(regStruct);
+	thread_runSheduler(regStruct, 0);
 	return 0;
 }
 
@@ -180,9 +208,8 @@ static int thread_calledWrite( struct registerStruct * regStruct )
 	return 1;
 }
 
-static int thread_newThread( struct registerStruct * regStruct, void * function, void * params )
+static int thread_newThread( struct registerStruct * regStruct, unsigned int function, unsigned int params, unsigned int domain )
 {
-	thread_sheduler_enabled = 1;
 	if( list_isEmpty( &thread_ctrl->emptyList ) ){
 		print("no space for another thread - return 0\n");
 		return 0;
@@ -193,25 +220,57 @@ static int thread_newThread( struct registerStruct * regStruct, void * function,
 	newThread->status = ACTIVE;
 
 	int i = 0;
-	newThread->regs.r[0] = *((unsigned int *)params);
+	newThread->regs.r[0] = params;
 	for(i = 1;i<NR_OF_REGS;i++){
 		newThread->regs.r[i] = 0;
 	}
 	
-	newThread->regs.pc = (unsigned int)function;
+	newThread->regs.pc = function;
 	newThread->regs.lr = 0;
 	newThread->regs.cpsr = 0x00000010;
-	newThread->regs.sp = newThread->inital_sp;
+
+	newThread->address_Space = domain;
+	add_space_ctrl->spaces[domain-1].running_threads++;
+	
+	if( with_VIRTUAL_STACK ){
+		newThread->regs.sp = 0x100000 - add_space_ctrl->spaces[domain-1].running_threads * THREAD_STACKSIZE;
+	}
+	else
+		newThread->regs.sp = newThread->inital_sp;
+	
+	newThread->local_id = add_space_ctrl->spaces[domain-1].running_threads;
 
 	thread_createID(newThread);
+	mc_enableStack_forThread(newThread->pos, domain);
 	newThread->timestamp =  st_getTimeStamp();
-
+	
 	return thread_contextChange(newThread, regStruct);
 }
 
-unsigned int thread_getRunningID( void )
+static int thread_newProcess( struct registerStruct * regStruct, unsigned int function, unsigned int params )
 {
-	return thread_ctrl->running->id;
+	int i = 0;
+	for(i = 0;i<MAX_ADD_SPACES;i++){
+		if( ! add_space_ctrl->spaces[i].running_threads ){
+			break;
+		}
+	}
+	unsigned int domain = (i+1);
+	if( i >= MAX_ADD_SPACES ){
+		print("maximum number of processes running  - return 0\n");
+		return 0;
+	}
+	if( list_isEmpty( &thread_ctrl->emptyList ) ){
+		print("no space for another thread - return 0\n");
+		return 0;
+	}
+
+	int page = nextPage(domain);
+	if( page < 0){
+		print("out of memory  - return 0\n");
+	}
+	mc_allocMemory(page,domain,1);
+	return thread_newThread( regStruct, function, params, domain );
 }
 
 /* if thread_sheduler_enabled != 0 in thread.c, 
@@ -225,22 +284,25 @@ unsigned int thread_getRunningID( void )
  * nextActive means here : looking in all positions after the currently active thread
  * not a perfect FIFO, because a new thread will get a random position, and be the next running
  * but no thread should starve to death.. */
-int thread_runSheduler( struct registerStruct * regStruct )
+int thread_runSheduler( struct registerStruct * regStruct, unsigned int alarm )
 {
 	if( list_isEmpty( &(thread_ctrl->activeList)) ){
-		// no more active thread pending
-		st_disablePIT();
-		if( thread_ctrl->running->status != RUNNING ){
-			all->idleThread.status = ACTIVE;
-			return  thread_contextChange( &(all->idleThread), regStruct);
+		if( !thread_wakeUp() ){
+			// st_disablePIT();
+			if( thread_ctrl->running->status != RUNNING ){
+				all->idleThread.status = ACTIVE;
+				return  thread_contextChange( &(all->idleThread), regStruct);
+			}
 		}
 		if( thread_ctrl->running->status == RUNNING ){
 			return 1;
 		}
+		print("ERROR !!!!!!\n!!!!!!!!!!!\n");
 	}
 	// switch to next active thread pending
+	if( alarm && all->idleThread.status != RUNNING )
+		return 1;
 	struct thread * nextActive = (struct thread *)list_popHead( &thread_ctrl->activeList);
-
 	return thread_contextChange(nextActive , regStruct);
 }
 
@@ -253,16 +315,16 @@ int thread_runSheduler( struct registerStruct * regStruct )
  * - sets the PeriodicTimerIntervall to our TIMESLICE, so each PIT inducates a contextchange */
 int thread_initThreadControl( void )
 {
-	infoContextChange = "\0"; 
-	infoPIT = "\0";
-	thread_sheduler_enabled = 0;
-
 	st_setPeriodicValue(TIMESLICE);
-	
+
 	// clear Memory 
 	// begin at threadQueue struct and over the whole threadArray struct
-	unsigned int endValue = THEAD_CTRL_BASE + SIZE_OF_THREADCTRL + (MAX_THREADS+1) * SIZE_OF_THREAD;
+	unsigned int endValue = THEAD_CTRL_BASE + SIZE_OF_THREADCTRL + SIZE_OF_SPACECTRL + (MAX_THREADS+1) * SIZE_OF_THREAD;
 	clearMemory( THEAD_CTRL_BASE, endValue);
+
+	list_initList(&(thread_ctrl->sleepingList) );
+	list_initList(&(thread_ctrl->emptyList) );
+	list_initList(&(thread_ctrl->activeList) );
 
 	int i = 0;
 	
@@ -270,14 +332,23 @@ int thread_initThreadControl( void )
 		// all threads starts dead <=> this array position is empty
 		all->threads[i].status = DEAD;
 		// inital stack pointer for this array position - will never change
-		all->threads[i].inital_sp = USERSTACK_BASE + (i+1)*THREAD_STACKSIZE;
-
+		if( ! with_VIRTUAL_STACK )
+			all->threads[i].inital_sp = USERSTACK_BASE + (i+1)*THREAD_STACKSIZE;
+		//
 		// the current stackspointer is the inital stack pointer for this thread position
 		all->threads[i].regs.sp = all->threads[i].inital_sp;
 		// position of this thread in threadArray
 		all->threads[i].pos = i;
 		// all threads to the empty list
 		list_addTail( &(thread_ctrl->emptyList), &(all->threads[i].connect) );
+	}
+
+	for(i = 0;i<MAX_ADD_SPACES;i++){
+		add_space_ctrl->spaces[i].running_threads  = 0;
+		add_space_ctrl->spaces[i].domain  = (i+1);
+	}
+	for(i = 0;i<NR_OF_EMPTYPAGES;i++){
+		add_space_ctrl->emptyPages[i] = 0;
 	}
 
 	thread_initIdleThread();
@@ -295,8 +366,15 @@ int thread_dealWithSWI(unsigned int swiCode, struct registerStruct * regStruct )
 	case SWI_KILL :{
 		return thread_kill(regStruct);
 	}
-	case SWI_CREATE :{
-		return thread_newThread(regStruct, (void *)regStruct->r[0], (void *)regStruct->r[1] );
+	case SWI_FORK :{
+		if( (regStruct->cpsr & 0x0000001f) != 0x10){
+			print("threads can only be created in USER mode\nplease start a new process\nEXIT...\n");
+			return 0;
+		}
+		return thread_newThread(regStruct, regStruct->r[0], regStruct->r[1], thread_ctrl->running->address_Space );
+	}
+	case SWI_NEWPROCESS :{
+		return thread_newProcess(regStruct, regStruct->r[0], regStruct->r[1] );
 	}
 	case SWI_YIELD :{
 		return thread_calledYield(regStruct);
@@ -309,6 +387,17 @@ int thread_dealWithSWI(unsigned int swiCode, struct registerStruct * regStruct )
 	}
 	case SWI_WRITE :{
 		return thread_calledWrite(regStruct);
+	}
+	case SWI_GET_ID :{
+		regStruct->r[0] = thread_ctrl->running->id;
+		return thread_ctrl->running->id;
+	}
+	case SWI_GET_LOCALID :{
+		regStruct->r[0] = thread_ctrl->running->local_id;
+		return thread_ctrl->running->local_id;
+	}
+	case SWI_GET_MEMORY :{
+		return thread_needsMemory();
 	}
 	default:
 		print("unknow swi code %x\nthread.c could not deal with this swi \n",swiCode);
@@ -325,10 +414,11 @@ int thread_dealWithSWI(unsigned int swiCode, struct registerStruct * regStruct )
  *  BUT we have long TIMESLICES to optical see what our threads are doing 
  *  - so this whould enable a wait(1) bomb and other thread could starve to death... 
  *  so this behaviour depends on CRITICAL_WAIT_TIME */
-int thread_wakeUp(struct registerStruct * regStruct)
+int thread_wakeUp(void)
 {
 	unsigned int currTime = st_getTimeStamp();
 	unsigned int nextAlarm = 0;
+	unsigned int out = 0;
 	
 	struct list * tmp = list_popHead( &thread_ctrl->sleepingList );
 	
@@ -346,7 +436,8 @@ int thread_wakeUp(struct registerStruct * regStruct)
 			
 			sleepingThread->status = ACTIVE;
 
-			list_addTail(&thread_ctrl->activeList, (struct list *)sleepingThread );
+			list_addHead(&thread_ctrl->activeList, (struct list *)sleepingThread );
+			out = 1;
 			
 		}else{
 			list_addTail(&tmpList, (struct list *)sleepingThread );
@@ -370,7 +461,13 @@ int thread_wakeUp(struct registerStruct * regStruct)
 		st_disableAlarmInterrupt();
 	}
 
-	return thread_runSheduler(regStruct);
+	return out;
+	//return thread_runSheduler(regStruct, 0);
+}
+
+unsigned int thread_getRunningPosition( void )
+{
+	return thread_ctrl->running->pos;
 }
 
 int thread_infoAboutInput( struct registerStruct * regStruct )
@@ -415,7 +512,10 @@ int thread_infoAboutInput( struct registerStruct * regStruct )
 				}
 			}
 		}else{
-			list_addTail(&tmpList, (struct list *)sleepingThread );
+			if( sleepingThread->wakeTime > currTime )
+				list_addHead(&thread_ctrl->activeList, (struct list *)sleepingThread );
+			else
+				list_addTail(&tmpList, (struct list *)sleepingThread );
 		}
 	}
 	tmp = list_popHead( &tmpList );

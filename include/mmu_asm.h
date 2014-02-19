@@ -13,3 +13,5 @@ void mmu_asm_invalidate_DCache(void);
 void mmu_asm_invalidate_ICache(void);
 void mmu_asm_invalidate_I_TLB(void);
 void mmu_asm_invalidate_D_TLB(void);
+void mmu_asm_writeFCSE(unsigned int);
+unsigned int mmu_asm_readFCSE(void);

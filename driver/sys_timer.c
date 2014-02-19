@@ -58,25 +58,29 @@ extern unsigned int thread_sheduler_enabled;
 
 /* shared with lib_system/systemtests.c and system/hreads.c 
  * holds infoTag with is printed when an PIT is handled by st_handlePIT  */
-char* infoPIT = 0;
+// char* infoPIT = 0;
 
 static volatile
 struct st_interface * const sys_timer = (struct st_interface *)ST;
+
+
+void st_enablePIT(void)
+{
+        sys_timer->ST_IER = PITS;
+}
 
 /* handle an PIT 
  * handling depends on two global variables
  * may print an infoTag or call thread_runSheduler to initiate preemtive multitasking  */
 void st_handlePIT( struct registerStruct * regStruct )
 {
-        if(infoPIT != 0)
-                print(infoPIT);
-        if(thread_sheduler_enabled)
-                thread_runSheduler( regStruct );
+        thread_runSheduler( regStruct, 0 );    
 }
 /* some systemcalls may enable the AlarmInterrupt, if so look for sleeping threads */
-void st_handleAlarmInterrupt( struct registerStruct * regStruct )
+void st_handleAlarmInterrupt(void)
 {
-        thread_wakeUp(regStruct);
+        st_enablePIT();
+        thread_wakeUp();
 }
 /* check if PIT is enabled and coresponding bit is active */
 int st_triggeredPIT(unsigned int status_reg)
@@ -92,11 +96,11 @@ int st_triggeredAlarmInterrupt(unsigned int status_reg)
 int st_dealWithInterrupts( struct registerStruct * regStruct )
 {
         unsigned int status_reg = sys_timer->ST_SR;
+        if( st_triggeredAlarmInterrupt(status_reg) ){
+                st_handleAlarmInterrupt();
+        }
         if( st_triggeredPIT(status_reg) ){
                 st_handlePIT( regStruct );
-        }
-        if( st_triggeredAlarmInterrupt(status_reg) ){
-                st_handleAlarmInterrupt( regStruct );
         }
         return 1;
 }
@@ -168,11 +172,6 @@ void st_initPeriodicValue(void)
 void st_initRealtimeValue(void)
 {
         sys_timer->ST_RTMR = initalRTPRES;
-}
-
-void st_enablePIT(void)
-{
-        sys_timer->ST_IER = PITS;
 }
 
 void st_enableWDT(void)

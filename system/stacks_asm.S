@@ -4,7 +4,7 @@
 asm_init_stacks:
         
         // Setting stack pointers for all modes, full decending
-        // all Stackpointer the use external RAM, starting at 0x24000000
+        // all Stackpointer the use external RAM, starting at 0x23FFFFFC
         //
         //  - size of stackpointer for each mode 
         //     4 KByte = 4096 Byte = 0x1000 Byte
@@ -16,7 +16,7 @@ asm_init_stacks:
 
         mov      r0, lr
 
-        LDR      SP, =0x24000000        // set stackpointer for svc (supervisor mode = 10011)
+        LDR      SP, =0x23FFFFFC        // set stackpointer for svc (supervisor mode = 10011)
 
         MRS      R12, CPSR              // load status register
         BIC      R12, R12, #0x1F        // clear last 5 bits      

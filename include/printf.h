@@ -8,7 +8,7 @@
 // there is no attribute for binar attributes - so i prefer no typechecking
 void printf( char *str, ... );
 
-__attribute__( ( format(printf,1,2) ) )
+//__attribute__( ( format(printf,1,2) ) )
 void print( char *str, ... );
 
 void print_reginfo( struct reg_info *);

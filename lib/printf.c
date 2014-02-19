@@ -27,18 +27,25 @@ static void printHex(unsigned int address, int do_prefix)
         }
         // look at the 4 MSB bits
         unsigned int c = (address & mask);
+        unsigned int start = 0;
         // bring those bits to the range 0 to 15
         c = c >> 28;
         
         int i = 0;
         for(;i<8;){
-                dbgu_bufferedOutput(hexASCII[c]);
+
+                if( c )
+                        start = 1;
+                if(start)
+                        dbgu_bufferedOutput(hexASCII[c]);
                 // adjusting mask and updating the next 4 bits to look at
                 i++;
                 mask = mask >> 4;
                 c = (address & mask);
                 c = c >> (28 - i*4);
         }
+        if( !start )
+                dbgu_bufferedOutput(hexASCII[0]);
 }
 
 /* testing the attribute list for correct datatyps */
@@ -120,14 +127,21 @@ static void printH(unsigned int address, int do_prefix)
         
         // look at the 4 MSB bits
         unsigned int c = (address & mask);
+        unsigned int start = 0;
         
+        if( ! do_prefix )
+                start = 1;
+
         // bring those bits to the range 0 to 15
         c = c >> 28;
         
         int i = 0;
         for(;i<8;){
 
-                dbgu_writeChar( hexASCII[c] );
+                if( c )
+                        start = 1;
+                if( start )
+                        dbgu_writeChar( hexASCII[c] );
                 
                 // adjusting mask and updating the next 4 bits to look at
                 i++;
@@ -135,10 +149,61 @@ static void printH(unsigned int address, int do_prefix)
                 c = (address & mask);
                 c = c >> (28 - i*4);
         }
+        if( ! start )
+                dbgu_writeChar( hexASCII[0] );
 }
+/*
+static void printD(unsigned int address)
+{
+        char decASCII[] = "0123456789";
+        unsigned int mask = 0xf0000000;
+        
+        // look at the 4 MSB bits
+        unsigned int c = (address & mask);
+        unsigned int start = 0;
+        
+        // bring those bits to the range 0 to 15
+        c = c >> 28;
+        
+        int i = 0;
+        for(;i<8;){
+                unsigned int overflow = 0;
+                unsigned int carry = 0;
+                if( c )
+                        start = 1;
+                if( start ){
+                        carry = c;
+                }
+                // adjusting mask and updating the next 4 bits to look at
+                i++;
+                mask = mask >> 4;
+                c = (address & mask);
+                c = c >> (28 - i*4);
+                if( start ){
+                        if( (carry*10 + c) >= 200 ){
+                                dbgu_writeChar( decASCII[2] );
+
+
+                        }else{
+                                if( (carry*10 + c) >= 100 ){
+                                dbgu_writeChar( decASCII[1] );
+                                
+
+                                }else{
+
+                                }
+                        }else{
+
+                        }
+                }
+        }
+        if( ! start )
+                dbgu_writeChar( decASCII[0] );
+}
+*/
 
 /* testing the attribute list for correct datatyps */
-__attribute__( ( format(printf,1,2) ) )
+//__attribute__( ( format(printf,1,2) ) )
 void print( char *str, ... )
 {
         // makros to deal with variable arguments, imported from stdargs.c 
@@ -180,6 +245,16 @@ void print( char *str, ... )
                                 str++;
                                 break;
                                 }
+                        // an integer from our ap-list need to be displayed as hex-value
+                        /*
+                        case 'd':{
+                                unsigned int i = va_arg(arglist, unsigned int );
+                                printD(i);
+                                d = *str;
+                                str++;
+                                break;
+                                }
+                        */
                         // an adresss form our ap-list need to be displayed
                         case 'p':{
                                 void *addr = va_arg(arglist, void* );
@@ -239,21 +314,21 @@ void print_reginfo( struct reg_info * reg)
 //Prints all registers, printing via polling, so output will display during interrupt handling
 void print_RegisterStruct( struct registerStruct * reg)
 {
-        print("         lr_irq    : [<%x>]\n", reg->pc);
+        print("         lr_irq    : [<%p>]\n", reg->pc);
         unsigned int mode = reg->cpsr & 0x0000001F;
         if( mode == 0x1F ){
-                print("         sp_sys   : [<%x>]\n", reg->sp);
-                print("         lr_sys   : [<%x>]\n", reg->lr);
-                print("         cpsr_sys : [<%x>]\n", reg->cpsr);
+                print("         sp_sys    : [<%p>]\n", reg->sp);
+                print("         lr_sys    : [<%p>]\n", reg->lr);
+                print("         cpsr_sys  : [<%p>]\n", reg->cpsr);
         }else{
-                print("         sp_user   : [<%x>]\n", reg->sp);
-                print("         lr_user   : [<%x>]\n", reg->lr);
-                print("         cpsr_user : [<%x>]\n", reg->cpsr);  
+                print("         sp_user   : [<%p>]\n", reg->sp);
+                print("         lr_user   : [<%p>]\n", reg->lr);
+                print("         cpsr_user : [<%p>]\n", reg->cpsr);  
         }
-        print("  r0 : %x  r1 : %x  r2 : %x\n",reg->r[0], reg->r[1], reg->r[2]);
-        print("  r3 : %x  r4 : %x  r5 : %x\n",reg->r[3], reg->r[4], reg->r[5]);
-        print("  r6 : %x  r7 : %x  r8 : %x\n",reg->r[6], reg->r[7], reg->r[8]);
-        print("  r9: %x  r10: %x  r11 : %x\n",reg->r[9], reg->r[10], reg->r[11]);
+        print("  r0 : %p  r1 : %p  r2 : %p\n",reg->r[0], reg->r[1], reg->r[2]);
+        print("  r3 : %p  r4 : %p  r5 : %p\n",reg->r[3], reg->r[4], reg->r[5]);
+        print("  r6 : %p  r7 : %p  r8 : %p\n",reg->r[6], reg->r[7], reg->r[8]);
+        print("  r9: %p  r10: %p  r11 : %p\n",reg->r[9], reg->r[10], reg->r[11]);
 }
 
 void print_Thread( struct thread * thread)

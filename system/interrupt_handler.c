@@ -9,10 +9,6 @@
 #include <aic.h>
 #include <sys_timer.h>
 
-#define IVT_ADDR        0x00200000  //remapped (writable) area for ivt
-#define JUMP_ADDR       0x00200020  
-#define LD_PC_PC_OFF18  0xE59FF018  //opcode pc = pc offset: 18
-
 unsigned int swi_test;
 
 struct ivt{
@@ -83,7 +79,7 @@ int handle_reset()
         return 1;
 }
 
-void interrupt_printInterruptInfo(char *interrupt_name, struct registerStruct *reg, unsigned int mode)
+void interrupt_printInterruptInfo(char *interrupt_name, unsigned int mode)
 {
         print("\n  %s  ",interrupt_name);
 
@@ -110,28 +106,21 @@ void interrupt_printInterruptInfo(char *interrupt_name, struct registerStruct *r
                 print(" in UNDEFINED  Mode\n");
                 break;
         }
-
-        print("  Register Values :      \n");
-        print_RegisterStruct(reg);
-        print("\n");
 }
 
 void interrupt_printHandling(unsigned int mode)
 {
         if( mode == 0x10){
-                unsigned int runningID = thread_getRunningID();
-                unsigned int runningPos = (runningID << 24);
-                runningPos = (runningPos >> 24);
-                print("\n  Handling:\n");
-                print("  Kill causing Thread\n");
-                print("  Position: %x\n",runningPos);
-                print("  ID      : %x\n",runningID);
+                print("  Handling: Kill causing Thread\n");
+                print("  thread ID %x\n",thread_getRunningPosition());
                 print("\n");
                 return;
         }
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-        print("* JUMP BACK *\n");
+        print("*   SYSTEM HOLD              *\n");
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n");
+	while(1)
+	  ;
 }
 
 //Undefined Instruction-Handler
@@ -139,7 +128,11 @@ void interrupt_printHandling(unsigned int mode)
 int handle_undef_inst(struct registerStruct *reg)
 {       
         unsigned int mode = reg->cpsr & 0x0000001F;
-        interrupt_printInterruptInfo("UNDEFINED INSTRUCTION", reg, mode);
+        interrupt_printInterruptInfo("UNDEFINED INSTRUCTION", mode);
+        print("  Register Values :      \n");
+        print_RegisterStruct(reg);
+        print("\n");
+	interrupt_printHandling(mode);
         return 1;
 }
 //Software Interrupt Handler
@@ -162,7 +155,6 @@ int handle_swi(struct registerStruct *reg)
                 print("software interrupt at:\n");
                 print_RegisterStruct(reg);
         }
-
         return 1;
 }
 //Prefetch Handler
@@ -170,8 +162,11 @@ int handle_swi(struct registerStruct *reg)
 int handle_prefetch(struct registerStruct *reg)
 {        
         unsigned int mode = reg->cpsr & 0x0000001F;
-        interrupt_printInterruptInfo("PREFETCH  ABORT      ", reg, mode);
+        interrupt_printInterruptInfo("PREFETCH  ABORT      ", mode);
 
+        print("  Register Values :      \n");
+        print_RegisterStruct(reg);
+        print("\n");
         interrupt_printHandling(mode);
         if( mode == 0x10 ){
                 return thread_kill(reg);
@@ -182,11 +177,11 @@ int handle_prefetch(struct registerStruct *reg)
 int handle_data_abort(struct registerStruct *reg)
 {
         unsigned int mode = reg->cpsr & 0x0000001F;
-        interrupt_printInterruptInfo("DATA      ABORT      ", reg, mode);
+        interrupt_printInterruptInfo("DATA      ABORT      ", mode);
         int type = mc_getAbortType();
         if( type <= 0 && type < 9 && type != 3 && type != 5 && type != 7 )
-                print("  Modified Virtual Address was:\nMVA:  [> %x <]\n",mc_getAbortAdress());
-        print("  Data Abort caused by:\n");
+                print("  Modified Virtual Address was:\n  MVA:  [> %x <]\n",mc_getAbortAdress());
+        print("  Data Abort caused by :\n");
         switch( type ){
         case 1 :
                 print(" -> Alignment abort\n");
@@ -220,21 +215,28 @@ int handle_data_abort(struct registerStruct *reg)
         }
         switch( mc_getAbortStatus() ){
         case 0 :
-                print(" -> during data read\n");
+                print(" -> during data read at %p\n",mc_getAbortAdress());
                 break;
         case 1 :
-                print(" -> during data write\n"); 
+                print(" -> during data write at %p\n",mc_getAbortAdress());
                 break;
         case 2 :
-                print(" -> during code fetch\n"); 
+                print(" -> during code fetch at %p\n",mc_getAbortAdress());
                 break;
         default : ;
         }
-
+        print("  Register Values :      \n");
+        print_RegisterStruct(reg);
+        print("\n");
         interrupt_printHandling(mode);
         if( mode == 0x10 ){
+		while(1)
+		  ;
                 return thread_kill(reg);
         }
+        while(1)
+                ;
+	
         return 1;
 }
 

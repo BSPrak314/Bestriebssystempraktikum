@@ -23,10 +23,10 @@ USR = user
 # Quellen
 #
 LSCRIPT = kernel.lds
-OBJ = $(SYSTEM)/start.o $(SYSTEM)/stacks_asm.o $(SYSTEM)/initKernel.o $(SYSTEM)/interrupt_handler.o $(SYSTEM)/interrupt_handler_asm.o $(SYSTEM)/thread.o
-OBJ += $(DRIVER)/dbgu.o $(DRIVER)/aic.o $(DRIVER)/mem_ctrl.o $(DRIVER)/sys_timer.o $(DRIVER)/led.o $(DRIVER)/pmc.o $(DRIVER)/mmu_asm.o
-OBJ += $(LIB)/printf.o $(LIB)/systemtests.o $(LIB)/regcheck.o $(LIB)/regcheck_asm.o $(LIB)/utils.o $(LIB)/shell.o $(LIB)/reg_operations_asm.o $(LIB)/buffer.o $(LIB)/list.o
-OBJ += $(USR)/syscall.o $(USR)/syscall_asm.o $(USR)/application.o
+OBJ = $(SYSTEM)/start.o $(SYSTEM)/stacks_asm.o $(SYSTEM)/initKernel.o $(SYSTEM)/interrupt_handler.o $(SYSTEM)/interrupt_handler_asm.o $(SYSTEM)/thread.o $(SYSTEM)/mem_ctrl.o $(SYSTEM)/mmu_asm.o
+OBJ += $(DRIVER)/dbgu.o $(DRIVER)/aic.o $(DRIVER)/sys_timer.o $(DRIVER)/led.o $(DRIVER)/pmc.o
+OBJ += $(LIB)/printf.o $(LIB)/regcheck.o $(LIB)/regcheck_asm.o $(LIB)/utils.o $(LIB)/reg_operations_asm.o $(LIB)/buffer.o $(LIB)/list.o
+OBJ += $(USR)/syscall.o $(USR)/syscall_asm.o $(USR)/application.o $(USR)/user_lib.o
 
 OBJ := $(OBJ:%=$(BIN)/%)
 
@@ -37,7 +37,7 @@ CC = arm-none-eabi-gcc
 LD = arm-none-eabi-ld
 OBJCOPY = arm-none-eabi-objcopy
 
-CFLAGS = -Wall -Wextra -ffreestanding -mcpu=arm920t -O2
+CFLAGS = -Wall -Wextra -ffreestanding -mcpu=arm920t -O2 -fno-inline
 CPPFLAGS = -Iinclude
 #LIBGCC := $(shell $(CC) -print-libgcc-file-name)
 
